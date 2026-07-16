@@ -1,0 +1,15 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+*.tsbuildinfo
+
+# Your real bank statement — never commit or deploy it. The app still auto-loads
+# it in local dev because the file exists on your machine; it just stays untracked.
+public/sample-statement.csv
+Tranzactii_*.csv
+
+# Legacy first-attempt artifacts (kept for reference, not part of the app)
+transactions_categorized.csv
+report.html
