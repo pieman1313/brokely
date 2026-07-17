@@ -24,6 +24,19 @@ import FileLoader from "./components/FileLoader";
 
 const BEHAVIOURAL_TAGS = ["#recurring", "#large", "#weekend", "#cash"];
 
+// dashboard sections, in default order — reorderable & hideable by the user
+const SECTIONS: { id: string; title: string }[] = [
+  { id: "kpis", title: "Overview (KPIs)" },
+  { id: "groups-exclude", title: "Groups — include/exclude" },
+  { id: "money-flow", title: "Money flow" },
+  { id: "monthly", title: "Monthly in vs out" },
+  { id: "top-categories", title: "Top categories" },
+  { id: "top-merchants", title: "Top merchants" },
+  { id: "recurring", title: "Recurring & subscriptions" },
+  { id: "transactions", title: "Transactions" },
+];
+const SECTION_IDS = SECTIONS.map((s) => s.id);
+
 function initialTheme(): "light" | "dark" {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
@@ -41,6 +54,8 @@ export default function App() {
   const [assignReq, setAssignReq] = useState<{ who: string; n: number } | null>(null);
   const [groups, setGroups] = useState<GroupDef[]>(() => loadGroups());
   const [tab, setTab] = useLocalStorageState<"dashboard" | "configure">("spend.tab", "dashboard");
+  const [order, setOrder] = useLocalStorageState<string[]>("spend.order", SECTION_IDS);
+  const [hidden, setHidden] = useLocalStorageState<string[]>("spend.hidden", []);
 
   useEffect(() => saveOverrides(overrides), [overrides]);
   useEffect(() => saveGroups(groups), [groups]);
@@ -185,6 +200,65 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // dashboard section ordering / visibility
+  const fullOrder = [...order.filter((id) => SECTION_IDS.includes(id)), ...SECTION_IDS.filter((id) => !order.includes(id))];
+  const hiddenSet = new Set(hidden);
+  const moveSection = (from: string, to: string) =>
+    setOrder(() => {
+      const arr = [...fullOrder];
+      const fi = arr.indexOf(from);
+      const tiOrig = arr.indexOf(to);
+      if (fi < 0 || tiOrig < 0) return arr;
+      arr.splice(fi, 1);
+      let ti = arr.indexOf(to);
+      if (fi < tiOrig) ti += 1; // dragging downward → drop AFTER the target (reaches last slot)
+      arr.splice(ti, 0, from);
+      return arr;
+    });
+  const closeSection = (id: string) => setHidden((h) => (h.includes(id) ? h : [...h, id]));
+  const toggleHidden = (id: string) => setHidden((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id]));
+
+  const renderSection = (id: string) => {
+    const shared = { id, onClose: () => closeSection(id), onMove: moveSection };
+    switch (id) {
+      case "kpis":
+        return <Card key={id} {...shared} title="Overview"><StatTiles stats={stats} currency={currency} /></Card>;
+      case "groups-exclude":
+        return (
+          <Card key={id} {...shared} title="Groups — include or exclude" subtitle="Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.">
+            <GroupedTable txns={filtered} currency={currency} dim={groupBy} onDimChange={changeGroupBy} excluded={excluded} onToggle={toggleGroup} onSetMany={setManyGroups} overrides={overrides} onAssign={assign} groupLabels={groupLabelMap} />
+          </Card>
+        );
+      case "money-flow":
+        return (
+          <Card key={id} {...shared} className="sankey-card" title="Money flow" subtitle="Income → available → where it goes. Click a group or category to filter. Transfers between your own accounts are hidden until you enable “Internal”." actions={
+            <label className="slider">
+              Hide flows under {(minFlowPct * 100).toFixed(1)}%
+              <input type="range" min={0} max={0.05} step={0.0025} value={minFlowPct} onChange={(e) => setMinFlowPct(Number(e.target.value))} />
+            </label>
+          }>
+            <Sankey model={model} currency={currency} onPickGroup={(gid) => patch({ groups: [gid] })} onPickCategory={(category) => patch({ categories: [category] })} />
+          </Card>
+        );
+      case "monthly":
+        return <Card key={id} {...shared} title="Monthly in vs out"><MonthlyTrend data={monthly} currency={currency} /></Card>;
+      case "top-categories":
+        return <Card key={id} {...shared} title="Top categories"><BarList items={catItems} currency={currency} empty="No spending in this view." onPick={(it) => patch({ categories: [it.label] })} /></Card>;
+      case "top-merchants":
+        return <Card key={id} {...shared} title="Top merchants"><BarList items={merchItems} currency={currency} empty="No merchants in this view." onPick={(it) => patch({ search: it.label })} /></Card>;
+      case "recurring":
+        return <Card key={id} {...shared} title="Recurring & subscriptions"><RecurringPanel items={recur} currency={currency} /></Card>;
+      case "transactions":
+        return (
+          <Card key={id} {...shared} title="Transactions" subtitle={`${active.length.toLocaleString("en-US")} counted${excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details`}>
+            <TransactionTable txns={active} currency={currency} groupLabels={groupLabelMap} />
+          </Card>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="app">
       <header className="topbar">
@@ -240,75 +314,35 @@ export default function App() {
         </>
       ) : (
         <>
-          <FilterBar
-            filters={filters}
-            bounds={bounds}
-            groups={groupOptions}
-            categories={categoryOptions}
-            tags={tagOptions}
-            onChange={patch}
-            onReset={reset}
-            filtered={isFiltered(filters, bounds)}
-          />
-
-          <StatTiles stats={stats} currency={currency} />
-
-          <Card id="groups-exclude" title="Groups — include or exclude" subtitle="Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.">
-            <GroupedTable
-              txns={filtered}
-              currency={currency}
-              dim={groupBy}
-              onDimChange={changeGroupBy}
-              excluded={excluded}
-              onToggle={toggleGroup}
-              onSetMany={setManyGroups}
-              overrides={overrides}
-              onAssign={assign}
-              groupLabels={groupLabelMap}
+          <Card id="filters" title="Filters" subtitle={`${active.length.toLocaleString("en-US")} of ${txns.length.toLocaleString("en-US")} transactions in view`}>
+            <FilterBar
+              filters={filters}
+              bounds={bounds}
+              groups={groupOptions}
+              categories={categoryOptions}
+              tags={tagOptions}
+              onChange={patch}
+              onReset={reset}
+              filtered={isFiltered(filters, bounds)}
             />
           </Card>
 
-          <Card
-            id="money-flow"
-            className="sankey-card"
-            title="Money flow"
-            subtitle="Income → available → where it goes. Click a group or category to filter. Transfers between your own accounts are hidden until you enable “Internal”."
-            actions={
-              <label className="slider">
-                Hide flows under {(minFlowPct * 100).toFixed(1)}%
-                <input type="range" min={0} max={0.05} step={0.0025} value={minFlowPct} onChange={(e) => setMinFlowPct(Number(e.target.value))} />
-              </label>
-            }
-          >
-            <Sankey
-              model={model}
-              currency={currency}
-              onPickGroup={(id) => patch({ groups: [id] })}
-              onPickCategory={(category) => patch({ categories: [category] })}
-            />
-          </Card>
-
-          <div className="grid-2">
-            <Card id="monthly" title="Monthly in vs out"><MonthlyTrend data={monthly} currency={currency} /></Card>
-            <Card id="top-categories" title="Top categories">
-              <BarList items={catItems} currency={currency} empty="No spending in this view." onPick={(it) => patch({ categories: [it.label] })} />
-            </Card>
+          <div className="sections-bar">
+            <details className="sections-menu">
+              <summary>⚙︎ Sections{hidden.length ? ` · ${hidden.length} hidden` : ""}</summary>
+              <div className="ms-menu">
+                {SECTIONS.map((s) => (
+                  <label key={s.id} className="ms-opt">
+                    <input type="checkbox" checked={!hiddenSet.has(s.id)} onChange={() => toggleHidden(s.id)} />
+                    {s.title}
+                  </label>
+                ))}
+              </div>
+            </details>
+            <span className="sections-hint">drag ⠿ to reorder · ✕ on a card to hide</span>
           </div>
 
-          <div className="grid-2">
-            <Card id="top-merchants" title="Top merchants">
-              <BarList items={merchItems} currency={currency} empty="No merchants in this view." onPick={(it) => patch({ search: it.label })} />
-            </Card>
-            <Card id="recurring" title="Recurring & subscriptions"><RecurringPanel items={recur} currency={currency} /></Card>
-          </div>
-
-          <Card
-            id="transactions"
-            title="Transactions"
-            subtitle={`${active.length.toLocaleString("en-US")} counted${excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details`}
-          >
-            <TransactionTable txns={active} currency={currency} groupLabels={groupLabelMap} />
-          </Card>
+          {fullOrder.filter((id) => !hiddenSet.has(id)).map(renderSection)}
 
           <footer className="foot">
             <span>{txns.length.toLocaleString("en-US")} transactions parsed as <b>{parsed?.format}</b>.</span>

@@ -102,13 +102,6 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
 
   return (
     <div ref={wrapRef} className="sankey-wrap">
-      <button
-        className="btn-ghost sankey-export"
-        title="Download the diagram as a PNG"
-        onClick={() => { if (svgRef.current) exportSvgPng(svgRef.current, "money-flow.png").catch((err) => console.error("Sankey export failed:", err)); }}
-      >
-        ⤓ Export image
-      </button>
       <svg ref={svgRef} width={width} height={height} role="img" aria-label="Money flow diagram">
         {/* links */}
         <g fill="none">
@@ -172,6 +165,16 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
           wrap={wrapRef.current}
         />
       )}
+
+      <div className="sankey-foot">
+        <button
+          className="btn-ghost"
+          title="Download the diagram as a PNG"
+          onClick={() => { if (svgRef.current) exportSvgPng(svgRef.current, "money-flow.png").catch((err) => console.error("Sankey export failed:", err)); }}
+        >
+          ⤓ Export image
+        </button>
+      </div>
     </div>
   );
 }

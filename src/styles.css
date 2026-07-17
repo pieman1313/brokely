@@ -147,11 +147,7 @@ button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid t
 .banner.warn { background: color-mix(in srgb, var(--c-yellow) 16%, transparent); color: var(--text-secondary); border: 1px solid var(--border); }
 
 /* ---------------- filter bar ---------------- */
-.filterbar {
-  background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px;
-  display: flex; flex-direction: column; gap: 10px;
-}
+.filterbar { display: flex; flex-direction: column; gap: 10px; }
 .fb-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .fb-group { display: flex; align-items: center; gap: 8px; }
 .fb-group.grow { flex: 1; min-width: 180px; }
@@ -196,7 +192,7 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .ms-clear:disabled { color: var(--muted); cursor: default; }
 
 /* ---------------- stat tiles ---------------- */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; box-shadow: var(--shadow); }
 .tile-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tile-value { font-size: 21px; font-weight: 680; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -207,13 +203,26 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 /* ---------------- cards ---------------- */
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 16px; }
 .card.is-collapsed { padding-bottom: 14px; }
-.card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer; user-select: none; }
 .card.is-collapsed .card-head { margin-bottom: 0; }
 .card-head-main { flex: 1; min-width: 0; }
-.card-actions { display: flex; align-items: center; gap: 10px; flex: none; }
-.card-collapse { background: transparent; border: none; color: var(--muted); font-size: 13px; padding: 2px 4px; line-height: 1; margin-top: 1px; }
-.card-collapse:hover { color: var(--text-primary); }
+.card-actions { display: flex; align-items: center; gap: 10px; flex: none; cursor: default; }
+.card-collapse { background: transparent; border: none; cursor: pointer; padding: 0; color: var(--muted); font-size: 13px; line-height: 1; flex: none; }
+.card-head:hover .card-collapse { color: var(--text-primary); }
+.drag-handle { cursor: grab; color: var(--muted); font-size: 14px; padding: 0 2px; flex: none; }
+.drag-handle:active { cursor: grabbing; }
+.card-close { background: transparent; border: none; color: var(--muted); font-size: 14px; padding: 2px 7px; border-radius: 7px; flex: none; }
+.card-close:hover { color: var(--neg); background: var(--page); }
+.card.drag-over { outline: 2px dashed var(--g-required); outline-offset: -2px; }
 .card-sub { color: var(--muted); font-size: 12.5px; margin: 3px 0 0; }
+
+/* sections manager */
+.sections-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sections-menu { position: relative; }
+.sections-menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 9px; padding: 7px 12px; font-size: 13px; color: var(--text-primary); }
+.sections-menu > summary::-webkit-details-marker { display: none; }
+.sections-menu > summary:hover { border-color: var(--muted); }
+.sections-hint { color: var(--muted); font-size: 12px; }
 
 /* ---------------- top-bar tabs ---------------- */
 .tabs { margin-right: 6px; }
@@ -226,7 +235,8 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 
 /* ---------------- sankey ---------------- */
 .sankey-wrap { position: relative; width: 100%; overflow: hidden; }
-.sankey-export { position: absolute; top: 0; right: 0; z-index: 5; font-size: 12px; padding: 5px 10px; }
+.sankey-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.sankey-foot .btn-ghost { font-size: 12px; padding: 5px 11px; }
 .sankey-empty, .chart-empty { color: var(--muted); text-align: center; padding: 40px 0; }
 .sankey-label { font-size: 12px; paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
 .sankey-label-name { fill: var(--text-primary); font-weight: 550; }
