@@ -33,6 +33,11 @@ npm run preview  # serve the production build
   (required / optional / to-people / savings / income) and a category
   (groceries, eating out, utilities, …) by a merchant ruleset, and given
   behavioural tags: `#recurring`, `#large`, `#weekend`, `#cash`, `#internal`.
+- **Custom categories & rules** — manually assign a group + category to an entire
+  merchant, overriding the automatic tagging everywhere (type a new category name
+  to create one). Rules persist in your browser; assign directly from the
+  merchant-grouped table. Reclassification respects each transaction's sign — a
+  refund at a merchant you mark as spending stays income rather than inflating it.
 - **Groups — include / exclude** — a searchable table that groups every
   transaction by category, merchant, or top-level group. Each group has a
   checkbox (ticked by default); unticking one drops it from **every** chart, tile

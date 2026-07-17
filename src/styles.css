@@ -298,6 +298,49 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .member-who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .member-amt { font-variant-numeric: tabular-nums; }
 
+/* ---------------- grouped-table assign affordances ---------------- */
+.glabel-text { cursor: pointer; }
+.assign-btn {
+  margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+}
+.assign-btn:hover { border-color: var(--g-required); color: var(--g-required); }
+.custom-badge {
+  margin-left: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 1px 7px; border-radius: 999px; color: var(--g-required);
+  background: color-mix(in srgb, var(--g-required) 16%, transparent);
+}
+
+/* ---------------- rules panel ---------------- */
+.rules-form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.rules-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px; }
+.rules-field span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.rules-field input, .rules-field select {
+  background: var(--page); border: 1px solid var(--border); color: var(--text-primary);
+  border-radius: 9px; padding: 8px 11px; font: inherit; width: 100%;
+}
+.rules-add { flex: none; }
+.rules-add:disabled { opacity: 0.5; cursor: default; }
+.rules-empty { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.rules-list-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 8px; color: var(--text-secondary); font-size: 12.5px; }
+.rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rules-list li { display: flex; align-items: center; gap: 8px; }
+.rules-item {
+  flex: 1; display: flex; align-items: center; gap: 8px; text-align: left;
+  background: var(--page); border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; font-size: 13px; color: var(--text-primary);
+}
+.rules-item:hover { border-color: var(--muted); }
+.rules-who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+.rules-arrow { color: var(--muted); }
+.rules-cat { color: var(--text-secondary); }
+.rules-remove { flex: none; background: transparent; border: 1px solid var(--border); color: var(--neg); border-radius: 8px; padding: 6px 10px; }
+.rules-remove:hover { border-color: var(--neg); }
+.grp-chip.grp-income { color: var(--g-income); border-color: color-mix(in srgb, var(--g-income) 45%, transparent); }
+.grp-chip.grp-required { color: var(--g-required); border-color: color-mix(in srgb, var(--g-required) 45%, transparent); }
+.grp-chip.grp-optional { color: var(--g-optional); border-color: color-mix(in srgb, var(--g-optional) 45%, transparent); }
+.grp-chip.grp-transfers { color: var(--g-transfers); border-color: color-mix(in srgb, var(--g-transfers) 45%, transparent); }
+.grp-chip.grp-savings { color: var(--g-savings); border-color: color-mix(in srgb, var(--g-savings) 45%, transparent); }
+
 /* ---------------- footer ---------------- */
 .foot { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .foot-total { margin-left: auto; font-variant-numeric: tabular-nums; }

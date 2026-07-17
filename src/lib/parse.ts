@@ -204,7 +204,8 @@ function parseRevolut(text: string): ParseResult {
       debit,
       credit,
       amount: credit > 0 ? credit : debit,
-      who: cat.who,
+      // never leave a blank counterparty — it must round-trip as an override key
+      who: cat.who || (row["Type"] ?? "").trim() || "Unknown",
       group: cat.group,
       category: cat.category,
       direction: cat.direction,

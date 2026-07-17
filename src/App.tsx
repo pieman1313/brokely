@@ -5,9 +5,11 @@ import { parseStatement } from "./lib/parse";
 import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "./lib/analytics";
+import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, categoriesWithGroup, type Overrides } from "./lib/overrides";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
 import FilterBar from "./components/FilterBar";
+import RulesPanel from "./components/RulesPanel";
 import StatTiles from "./components/StatTiles";
 import Sankey from "./components/Sankey";
 import MonthlyTrend from "./components/MonthlyTrend";
@@ -36,6 +38,12 @@ export default function App() {
   // include/exclude table state
   const [groupBy, setGroupBy] = useState<GroupDim>("category");
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // manual reclassification rules (merchant -> group + category), persisted
+  const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
+  // {who, n}: n is a nonce so re-clicking the same merchant re-fires the prefill
+  const [assignReq, setAssignReq] = useState<{ who: string; n: number } | null>(null);
+
+  useEffect(() => saveOverrides(overrides), [overrides]);
 
   // apply theme to the document
   useEffect(() => {
@@ -64,7 +72,9 @@ export default function App() {
     }
   };
 
-  const txns = parsed?.txns ?? [];
+  // raw parsed txns, then apply manual overrides → everything downstream uses `txns`
+  const rawTxns = parsed?.txns ?? [];
+  const txns = useMemo(() => applyOverrides(rawTxns, overrides), [rawTxns, overrides]);
   const currency = parsed?.currency ?? "";
   const bounds = useMemo(() => boundsOf(txns), [txns]);
 
@@ -102,6 +112,8 @@ export default function App() {
   );
 
   const uncategorized = useMemo(() => txns.filter((t) => t.category === "Other").length, [txns]);
+  const merchantList = useMemo(() => distinctMerchants(txns), [txns]);
+  const categoryList = useMemo(() => categoriesWithGroup(txns), [txns]);
 
   if (!filters) {
     return (
@@ -152,6 +164,18 @@ export default function App() {
     setGroupBy(d);
     setExcluded(new Set()); // keys are dimension-specific; start fresh
   };
+
+  // manual override handlers
+  const setOverride = (who: string, group: Group, category: string) =>
+    setOverrides((o) => ({ ...o, [who]: { group, category } }));
+  const removeOverride = (who: string) =>
+    setOverrides((o) => {
+      const next = { ...o };
+      delete next[who];
+      return next;
+    });
+  const clearOverrides = () => setOverrides({});
+  const assign = (who: string) => setAssignReq((prev) => ({ who, n: (prev?.n ?? 0) + 1 }));
 
   const catItems: BarItem[] = cats.map((c) => ({
     key: `${c.group}:${c.category}`,
@@ -235,6 +259,26 @@ export default function App() {
           excluded={excluded}
           onToggle={toggleGroup}
           onSetMany={setManyGroups}
+          overrides={overrides}
+          onAssign={assign}
+        />
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>Custom categories &amp; rules</h2>
+            <p className="card-sub">Assign a group + category to an entire merchant — it overrides the automatic tagging everywhere. Type a new category name to create one. Rules are saved in this browser.</p>
+          </div>
+        </div>
+        <RulesPanel
+          merchants={merchantList}
+          categories={categoryList}
+          overrides={overrides}
+          onSet={setOverride}
+          onRemove={removeOverride}
+          onClear={clearOverrides}
+          focusMerchant={assignReq}
         />
       </section>
 

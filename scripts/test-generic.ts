@@ -1,5 +1,7 @@
 // Deterministic checks for the generic-CSV parser edge cases raised in review.
 import { parseStatement } from "../src/lib/parse";
+import { applyOverrides } from "../src/lib/overrides";
+import { computeStats } from "../src/lib/analytics";
 
 let fail = 0;
 function check(name: string, cond: boolean, extra = "") {
@@ -93,6 +95,29 @@ Salary Corp,2026-06-06,3000.00`;
     "different holder: own transfer→savings, person→transfers",
     !!own && own.group === "savings" && !!other && other.group === "transfers",
     `${own?.group}/${other?.group}`
+  );
+}
+
+// 9) manual override must respect each leg's sign: reclassifying a merchant with a
+//    purchase (debit) AND a refund (credit) to a spend group must NOT count the refund as spend.
+{
+  const csv = [
+    "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance",
+    "Card Payment,Current,2026-01-05 10:00:00,2026-01-05 10:00:00,ACME Store,-100,0,RON,COMPLETED,0",
+    "Card Payment,Current,2026-01-06 10:00:00,2026-01-06 10:00:00,ACME Store,40,0,RON,COMPLETED,0",
+    "Card Payment,Current,2026-01-07 10:00:00,2026-01-07 10:00:00,ACME Store,-30,0,RON,COMPLETED,0",
+  ].join("\n");
+  const base = parseStatement(csv).txns;
+  const eff = applyOverrides(base, { "ACME Store": { group: "optional", category: "Shopping & retail" } });
+  const s = computeStats(eff);
+  const shopping = eff.filter((t) => t.category === "Shopping & retail");
+  const refund = eff.find((t) => t.credit > 0);
+  check(
+    "override respects sign: purchases→spend, refund stays income",
+    shopping.length === 2 && shopping.every((t) => t.direction === "out") &&
+      !!refund && refund.group === "income" && refund.direction === "in" &&
+      Math.round(s.totalOut) === 130 && Math.round(s.totalIn) === 40,
+    `out=${s.totalOut} in=${s.totalIn} shopping=${shopping.length} refundGroup=${refund?.group}`
   );
 }
 

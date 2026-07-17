@@ -3,6 +3,7 @@ import type { Txn } from "../types";
 import type { GroupDim } from "../lib/filters";
 import { groupKeyOf, groupLabelOf } from "../lib/filters";
 import { isInternalInflow } from "../lib/analytics";
+import type { Overrides } from "../lib/overrides";
 import { dateLabel, money, money2 } from "../lib/format";
 import { iconFor } from "../lib/tagging";
 
@@ -14,6 +15,8 @@ interface Props {
   excluded: Set<string>;
   onToggle: (key: string) => void;
   onSetMany: (keys: string[], included: boolean) => void;
+  overrides?: Overrides;
+  onAssign?: (merchant: string) => void; // jump to the rule editor prefilled
 }
 
 interface Grp {
@@ -30,7 +33,7 @@ const DIMS: { key: GroupDim; label: string }[] = [
   { key: "group", label: "Group" },
 ];
 
-export default function GroupedTable({ txns, currency, dim, onDimChange, excluded, onToggle, onSetMany }: Props) {
+export default function GroupedTable({ txns, currency, dim, onDimChange, excluded, onToggle, onSetMany, overrides, onAssign }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
@@ -128,6 +131,8 @@ export default function GroupedTable({ txns, currency, dim, onDimChange, exclude
                 included={included}
                 isOpen={isOpen}
                 currency={currency}
+                overridden={dim === "merchant" && !!overrides?.[g.key]}
+                onAssign={dim === "merchant" && onAssign ? () => onAssign(g.key) : undefined}
                 onToggle={() => onToggle(g.key)}
                 onExpand={() => setOpen(isOpen ? null : g.key)}
               />
@@ -144,10 +149,10 @@ export default function GroupedTable({ txns, currency, dim, onDimChange, exclude
 }
 
 function FragmentGroup({
-  g, dim, included, isOpen, currency, onToggle, onExpand,
+  g, dim, included, isOpen, currency, overridden, onAssign, onToggle, onExpand,
 }: {
   g: Grp; dim: GroupDim; included: boolean; isOpen: boolean; currency: string;
-  onToggle: () => void; onExpand: () => void;
+  overridden: boolean; onAssign?: () => void; onToggle: () => void; onExpand: () => void;
 }) {
   const members = isOpen ? [...g.members].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 100) : [];
   return (
@@ -156,10 +161,16 @@ function FragmentGroup({
         <td className="chk-col">
           <input type="checkbox" checked={included} onChange={onToggle} aria-label={`Include ${g.label}`} />
         </td>
-        <td className="grouped-label" onClick={onExpand}>
-          <span className="expand-caret">{isOpen ? "▾" : "▸"}</span>
-          {dim === "category" && <span className="cat-icon">{iconFor(g.key)}</span>}
-          {g.label}
+        <td className="grouped-label">
+          <span className="glabel-text" onClick={onExpand}>
+            <span className="expand-caret">{isOpen ? "▾" : "▸"}</span>
+            {dim === "category" && <span className="cat-icon">{iconFor(g.key)}</span>}
+            {g.label}
+          </span>
+          {overridden && <span className="custom-badge" title="Has a manual rule">custom</span>}
+          {onAssign && (
+            <button className="assign-btn" onClick={(e) => { e.stopPropagation(); onAssign(); }}>assign</button>
+          )}
         </td>
         <td className="num" onClick={onExpand}>{g.count}</td>
         <td className="num strong" onClick={onExpand}>{money(g.total, currency)}</td>

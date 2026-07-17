@@ -5,6 +5,7 @@ import { parseStatement } from "../src/lib/parse";
 import { buildSankey } from "../src/lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "../src/lib/analytics";
 import { applyFilters, defaultFilters, boundsOf, groupKeyOf } from "../src/lib/filters";
+import { applyOverrides } from "../src/lib/overrides";
 
 const path = process.argv[2] ?? "public/sample-statement.csv";
 const text = readFileSync(path, "utf8");
@@ -92,6 +93,22 @@ console.log("\n== GROUP EXCLUSION (simulate unticking a category) ==");
     console.log(`  out ${base.totalOut.toFixed(0)} -> ${after.totalOut.toFixed(0)} (dropped ${dropOut.toFixed(0)})`);
     console.log(`  recompute correct: ${Math.abs(dropOut - topCat.total) < 0.5}`);
     console.log(`  txns ${df.length} -> ${kept.length}`);
+  }
+}
+
+console.log("\n== MANUAL OVERRIDE (reassign a merchant) ==");
+{
+  const top = require("../src/lib/analytics").topMerchants(t, 1)[0];
+  if (top) {
+    const eff = applyOverrides(t, { [top.who]: { group: "required", category: "ZZ Custom Cat" } });
+    const changed = eff.filter((x: any) => x.category === "ZZ Custom Cat");
+    const origCount = t.filter((x) => x.who === top.who).length;
+    const allRequired = changed.every((x: any) => x.group === "required" && x.direction === "out");
+    console.log(`override "${top.who}" -> required / "ZZ Custom Cat"`);
+    console.log(`  matched txns: ${changed.length} (merchant had ${origCount}) — correct: ${changed.length === origCount}`);
+    console.log(`  all reassigned to required/out: ${allRequired}`);
+    console.log(`  1:1 length preserved: ${eff.length === t.length}`);
+    console.log(`  tags updated: ${changed[0] ? changed[0].tags.includes("#required") && changed[0].tags.includes("#zz-custom-cat") : "n/a"}`);
   }
 }
 
