@@ -17,6 +17,7 @@ interface Props {
   onSetMany: (keys: string[], included: boolean) => void;
   overrides?: Overrides;
   onAssign?: (merchant: string) => void; // jump to the rule editor prefilled
+  groupLabels?: Record<string, string>; // custom group labels for the "group" dimension
 }
 
 interface Grp {
@@ -33,7 +34,7 @@ const DIMS: { key: GroupDim; label: string }[] = [
   { key: "group", label: "Group" },
 ];
 
-export default function GroupedTable({ txns, currency, dim, onDimChange, excluded, onToggle, onSetMany, overrides, onAssign }: Props) {
+export default function GroupedTable({ txns, currency, dim, onDimChange, excluded, onToggle, onSetMany, overrides, onAssign, groupLabels }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
@@ -44,7 +45,7 @@ export default function GroupedTable({ txns, currency, dim, onDimChange, exclude
       const key = groupKeyOf(t, dim);
       let g = map.get(key);
       if (!g) {
-        g = { key, label: groupLabelOf(key, dim), count: 0, total: 0, members: [] };
+        g = { key, label: groupLabelOf(key, dim, groupLabels), count: 0, total: 0, members: [] };
         map.set(key, g);
       }
       g.count++;
@@ -52,7 +53,7 @@ export default function GroupedTable({ txns, currency, dim, onDimChange, exclude
       g.members.push(t);
     }
     return [...map.values()].sort((a, b) => b.total - a.total);
-  }, [txns, dim]);
+  }, [txns, dim, groupLabels]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Group } from "../types";
-import { GROUP_LABELS, GROUP_ORDER } from "../types";
+import type { Group, GroupDef } from "../types";
 import type { Overrides } from "../lib/overrides";
 import { iconFor } from "../lib/tagging";
 
 interface Props {
   merchants: string[];
   categories: { name: string; group: Group }[];
+  groups: GroupDef[];
   overrides: Overrides;
   onSet: (who: string, group: Group, category: string) => void;
   onRemove: (who: string) => void;
@@ -16,8 +16,11 @@ interface Props {
   focusMerchant?: { who: string; n: number } | null;
 }
 
-export default function RulesPanel({ merchants, categories, overrides, onSet, onRemove, onClear, focusMerchant }: Props) {
+export default function RulesPanel({ merchants, categories, groups, overrides, onSet, onRemove, onClear, focusMerchant }: Props) {
   const catGroup = useMemo(() => new Map(categories.map((c) => [c.name, c.group])), [categories]);
+  const gmap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const groupLabel = (id: string) => gmap.get(id)?.label ?? id;
+  const groupColor = (id: string) => `var(--g-${gmap.get(id)?.colorVar ?? "optional"})`;
 
   const [merchant, setMerchant] = useState("");
   const [group, setGroup] = useState<Group>("optional");
@@ -69,9 +72,9 @@ export default function RulesPanel({ merchants, categories, overrides, onSet, on
         </label>
         <label className="rules-field">
           <span>Group</span>
-          <select ref={rootRef} value={group} onChange={(e) => setGroup(e.target.value as Group)}>
-            {GROUP_ORDER.map((g) => (
-              <option key={g} value={g}>{GROUP_LABELS[g]}</option>
+          <select ref={rootRef} value={group} onChange={(e) => setGroup(e.target.value)}>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.label}</option>
             ))}
           </select>
         </label>
@@ -91,7 +94,7 @@ export default function RulesPanel({ merchants, categories, overrides, onSet, on
       </datalist>
       <datalist id="rp-categories">
         {categories.map((c) => (
-          <option key={c.name} value={c.name}>{GROUP_LABELS[c.group]}</option>
+          <option key={c.name} value={c.name}>{groupLabel(c.group)}</option>
         ))}
       </datalist>
 
@@ -115,7 +118,7 @@ export default function RulesPanel({ merchants, categories, overrides, onSet, on
               <span className="rules-arrow">→</span>
               <span className="cat-icon">{iconFor(ov.category)}</span>
               <span className="rules-cat">{ov.category}</span>
-              <span className={`grp-chip grp-${ov.group}`}>{GROUP_LABELS[ov.group]}</span>
+              <span className="grp-chip" style={{ color: groupColor(ov.group), borderColor: groupColor(ov.group) }}>{groupLabel(ov.group)}</span>
             </button>
             <button className="rules-remove" title="Remove rule" onClick={() => onRemove(who)}>✕</button>
           </li>

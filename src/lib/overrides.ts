@@ -5,8 +5,9 @@
 // tagging and are applied BEFORE any aggregation, so the Sankey, tiles, charts,
 // grouped table and totals all reflect them. Persisted per-browser (localStorage).
 
-import type { Direction, Group, Txn } from "../types";
+import type { Direction, Group, GroupDef, Txn } from "../types";
 import { baseTags } from "./tagging";
+import { groupMap } from "./groups";
 
 export interface Override {
   group: Group;
@@ -46,17 +47,19 @@ export function saveOverrides(o: Overrides): void {
  * at a merchant you reclassify to "Shopping" stays income rather than being counted as
  * spend, and an incoming own-account leg reclassified to a spend group is not double-counted.
  */
-export function applyOverrides(txns: Txn[], overrides: Overrides): Txn[] {
+export function applyOverrides(txns: Txn[], overrides: Overrides, groups: GroupDef[] = []): Txn[] {
   if (Object.keys(overrides).length === 0) return txns;
+  const gmap = groupMap(groups);
   return txns.map((t) => {
     const ov = t.who ? overrides[t.who] : undefined; // never key off an empty merchant
     if (!ov) return t;
+    const kind = gmap.get(ov.group)?.kind ?? "spend"; // group may have been deleted → treat as spend
 
     const incoming = t.credit > 0; // this leg's real money direction
     let direction: Direction;
-    if (ov.group === "savings") {
+    if (kind === "savings") {
       direction = "internal";
-    } else if (ov.group === "income") {
+    } else if (kind === "income") {
       if (!incoming) return t; // an outgoing leg can't become income
       direction = "in";
     } else {
@@ -68,7 +71,7 @@ export function applyOverrides(txns: Txn[], overrides: Overrides): Txn[] {
     // rebuild group/category tags; preserve the cross-transaction & cash behavioural tags
     const behavioural = t.tags.filter((x) => x === "#recurring" || x === "#large" || x === "#cash");
     const tags = [...new Set([...baseTags(cat, t.date), ...behavioural])];
-    return { ...t, group: ov.group, category: ov.category, direction, rule: "override:manual", tags };
+    return { ...t, group: ov.group, kind, category: ov.category, direction, rule: "override:manual", tags };
   });
 }
 

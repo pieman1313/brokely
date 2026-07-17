@@ -42,14 +42,14 @@ export function computeStats(txns: Txn[]): Stats {
     if (t.date < minDate) minDate = t.date;
     if (t.date > maxDate) maxDate = t.date;
     if (isInternalInflow(t)) continue; // returning own money — not in/out
-    if (t.group === "income") {
+    if (t.kind === "income") {
       totalIn += t.amount;
     } else {
       totalOut += t.amount;
-      if (t.group === "savings") savings += t.amount;
+      if (t.kind === "savings") savings += t.amount;
       else catTotals.set(t.category, (catTotals.get(t.category) ?? 0) + t.amount);
       // "merchants" = places you spent at; person-to-person transfers aren't merchants
-      if (t.direction === "out" && t.who && t.group !== "transfers") {
+      if (t.direction === "out" && t.who && t.kind !== "transfers") {
         merchTotals.set(t.who, (merchTotals.get(t.who) ?? 0) + t.amount);
       }
     }
@@ -97,7 +97,7 @@ export function monthlySeries(txns: Txn[]): MonthPoint[] {
       p = { month: t.month, in: 0, out: 0, net: 0 };
       map.set(t.month, p);
     }
-    if (t.group === "income") p.in += t.amount;
+    if (t.kind === "income") p.in += t.amount;
     else p.out += t.amount;
   }
   const pts = [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
@@ -130,7 +130,7 @@ export function topCategories(txns: Txn[], limit = 12): CategoryTotal[] {
   for (const t of txns) {
     // spending categories only — income and own-account savings live elsewhere
     // (the Sankey + table). Keeps this list consistent with the "Top category" tile.
-    if (t.group === "income" || t.group === "savings") continue;
+    if (t.kind === "income" || t.kind === "savings") continue;
     const key = `${t.group}::${t.category}`;
     let c = map.get(key);
     if (!c) {
@@ -153,7 +153,7 @@ export interface MerchantTotal {
 export function topMerchants(txns: Txn[], limit = 12): MerchantTotal[] {
   const map = new Map<string, MerchantTotal>();
   for (const t of txns) {
-    if (t.direction !== "out" || !t.who || t.group === "transfers") continue;
+    if (t.direction !== "out" || !t.who || t.kind === "transfers") continue;
     let mt = map.get(t.who);
     if (!mt) {
       mt = { who: t.who, total: 0, count: 0, category: t.category };
@@ -178,7 +178,7 @@ export function recurring(txns: Txn[], limit = 12): Recurring[] {
   // key on a normalised merchant stem so branch/case variants merge into one row
   const map = new Map<string, { display: string; months: Set<string>; total: number; category: string }>();
   for (const t of txns) {
-    if (t.group === "income" || t.group === "savings" || t.direction === "internal" || !t.who) continue;
+    if (t.kind === "income" || t.kind === "savings" || t.direction === "internal" || !t.who) continue;
     const key = merchantStem(t.who);
     let r = map.get(key);
     if (!r) {

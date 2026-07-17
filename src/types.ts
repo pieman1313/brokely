@@ -4,19 +4,27 @@
 export type Direction = "in" | "out" | "internal";
 
 /**
- * Top-level bucket a transaction rolls up to in the Sankey.
- * - income      : money arriving (salary, transfers in, interest)
- * - required    : non-discretionary spend (bills, groceries, health)
- * - optional    : discretionary spend (eating out, shopping, fun)
- * - transfers   : money sent to other people (not spending on goods)
- * - savings     : money moved into your own savings/deposits/other accounts
+ * How a group participates in the money flow — this (not the group id) decides
+ * which side of the ledger a transaction lands on:
+ * - income    : money arriving (inflow side)
+ * - spend     : discretionary/non-discretionary spending (outflow side)
+ * - transfers : money sent to other people (outflow, but not a "merchant")
+ * - savings   : moves between the user's own accounts (internal)
  */
-export type Group =
-  | "income"
-  | "required"
-  | "optional"
-  | "transfers"
-  | "savings";
+export type GroupKind = "income" | "spend" | "transfers" | "savings";
+
+/** A top-level group. Built-in or user-defined; identified by a stable id. */
+export type Group = string;
+
+export interface GroupDef {
+  id: string;
+  label: string;
+  kind: GroupKind;
+  /** CSS colour slot: resolved as var(--g-<colorVar>). */
+  colorVar: string;
+  /** true for the five built-in groups (cannot be deleted). */
+  builtin?: boolean;
+}
 
 /** One parsed + tagged transaction. Amounts are always positive numbers in the statement currency. */
 export interface Txn {
@@ -36,6 +44,8 @@ export interface Txn {
   /** Cleaned counterparty / merchant name shown to the user. */
   who: string;
   group: Group;
+  /** Denormalised group kind (from the group config) so aggregators never hardcode ids. */
+  kind: GroupKind;
   /** Fine-grained category, e.g. "Groceries". */
   category: string;
   direction: Direction;
@@ -60,18 +70,23 @@ export interface ParseResult {
   warnings: string[];
 }
 
-export const GROUP_ORDER: Group[] = [
-  "income",
-  "required",
-  "optional",
-  "transfers",
-  "savings",
+export const BUILTIN_GROUPS: GroupDef[] = [
+  { id: "income", label: "Income", kind: "income", colorVar: "income", builtin: true },
+  { id: "required", label: "Required", kind: "spend", colorVar: "required", builtin: true },
+  { id: "optional", label: "Optional", kind: "spend", colorVar: "optional", builtin: true },
+  { id: "transfers", label: "To people", kind: "transfers", colorVar: "transfers", builtin: true },
+  { id: "savings", label: "Savings & own accounts", kind: "savings", colorVar: "savings", builtin: true },
 ];
 
-export const GROUP_LABELS: Record<Group, string> = {
-  income: "Income",
-  required: "Required",
-  optional: "Optional",
-  transfers: "To people",
-  savings: "Savings & own accounts",
-};
+export const BUILTIN_KIND: Record<string, GroupKind> = Object.fromEntries(
+  BUILTIN_GROUPS.map((g) => [g.id, g.kind])
+);
+
+export const GROUP_ORDER: Group[] = BUILTIN_GROUPS.map((g) => g.id);
+
+export const GROUP_LABELS: Record<string, string> = Object.fromEntries(
+  BUILTIN_GROUPS.map((g) => [g.id, g.label])
+);
+
+/** Number of custom colour slots defined in styles.css (--g-custom-1 … --g-custom-N). */
+export const CUSTOM_COLOR_SLOTS = 8;

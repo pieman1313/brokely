@@ -13,9 +13,10 @@ export function groupKeyOf(t: Txn, dim: GroupDim): string {
   return t.group;
 }
 
-/** Human label for a group key under a dimension. */
-export function groupLabelOf(key: string, dim: GroupDim): string {
-  return dim === "group" ? GROUP_LABELS[key as Group] ?? key : key;
+/** Human label for a group key under a dimension. `labels` covers custom groups. */
+export function groupLabelOf(key: string, dim: GroupDim, labels?: Record<string, string>): string {
+  if (dim !== "group") return key;
+  return labels?.[key] ?? GROUP_LABELS[key as Group] ?? key;
 }
 
 export interface Filters {

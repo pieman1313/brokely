@@ -6,6 +6,7 @@ import { buildSankey } from "../src/lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "../src/lib/analytics";
 import { applyFilters, defaultFilters, boundsOf, groupKeyOf } from "../src/lib/filters";
 import { applyOverrides } from "../src/lib/overrides";
+import { BUILTIN_GROUPS } from "../src/types";
 
 const path = process.argv[2] ?? "public/sample-statement.csv";
 const text = readFileSync(path, "utf8");
@@ -40,7 +41,7 @@ const uncateg = t.filter((x) => x.category === "Other");
 console.log("uncategorised:", uncateg.length, `(${((uncateg.length / t.length) * 100).toFixed(1)}%)`);
 
 console.log("\n== SANKEY FLOW CONSERVATION ==");
-const m = buildSankey(t, 0);
+const m = buildSankey(t, 0, BUILTIN_GROUPS);
 console.log("nodes:", m.nodes.length, "| links:", m.links.length);
 console.log("totalIn:", m.totalIn.toFixed(2), "| totalOut:", m.totalOut.toFixed(2));
 // hub balance
@@ -76,7 +77,7 @@ const df = applyFilters(t, defaultFilters(boundsOf(t)));
 const ds = computeStats(df);
 console.log("txns in view:", df.length);
 console.log("in:", ds.totalIn.toFixed(0), "| out:", ds.totalOut.toFixed(0), "| net(left over):", ds.net.toFixed(0));
-const dm = buildSankey(df, 0);
+const dm = buildSankey(df, 0, BUILTIN_GROUPS);
 console.log("sankey nodes:", dm.nodes.length, "| surplus/deficit node:", dm.nodes.filter((n) => n.kind === "surplus" || n.kind === "deficit").map((n) => `${n.label}=${n.value.toFixed(0)}`));
 console.log("top merchants:", topMerchants(df, 5).map((m) => `${m.who}(${m.total.toFixed(0)})`));
 console.log("top categories:", topCategories(df, 6).map((c) => `${c.category}(${c.total.toFixed(0)})`));
@@ -100,7 +101,7 @@ console.log("\n== MANUAL OVERRIDE (reassign a merchant) ==");
 {
   const top = require("../src/lib/analytics").topMerchants(t, 1)[0];
   if (top) {
-    const eff = applyOverrides(t, { [top.who]: { group: "required", category: "ZZ Custom Cat" } });
+    const eff = applyOverrides(t, { [top.who]: { group: "required", category: "ZZ Custom Cat" } }, BUILTIN_GROUPS);
     const changed = eff.filter((x: any) => x.category === "ZZ Custom Cat");
     const origCount = t.filter((x) => x.who === top.who).length;
     const allRequired = changed.every((x: any) => x.group === "required" && x.direction === "out");

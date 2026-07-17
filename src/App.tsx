@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Group, ParseResult, Txn } from "./types";
-import { GROUP_LABELS, GROUP_ORDER } from "./types";
+import type { Group, GroupDef, GroupKind, ParseResult, Txn } from "./types";
 import { parseStatement } from "./lib/parse";
 import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "./lib/analytics";
 import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, categoriesWithGroup, type Overrides } from "./lib/overrides";
+import { loadGroups, saveGroups, groupMap, nextColorVar, slugId } from "./lib/groups";
+import { useLocalStorageState } from "./lib/ui-state";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
 import FilterBar from "./components/FilterBar";
 import RulesPanel from "./components/RulesPanel";
+import GroupsPanel from "./components/GroupsPanel";
 import StatTiles from "./components/StatTiles";
 import Sankey from "./components/Sankey";
 import MonthlyTrend from "./components/MonthlyTrend";
@@ -17,12 +19,10 @@ import BarList, { type BarItem } from "./components/BarList";
 import RecurringPanel from "./components/RecurringPanel";
 import TransactionTable from "./components/TransactionTable";
 import GroupedTable from "./components/GroupedTable";
+import Card from "./components/Card";
 import FileLoader from "./components/FileLoader";
 
 const BEHAVIOURAL_TAGS = ["#recurring", "#large", "#weekend", "#cash"];
-const LABEL_TO_GROUP: Record<string, Group> = Object.fromEntries(
-  (Object.entries(GROUP_LABELS) as [Group, string][]).map(([k, v]) => [v, k])
-) as Record<string, Group>;
 
 function initialTheme(): "light" | "dark" {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -35,27 +35,22 @@ export default function App() {
   const [minFlowPct, setMinFlowPct] = useState(0);
   const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
   const [error, setError] = useState<string | null>(null);
-  // include/exclude table state
   const [groupBy, setGroupBy] = useState<GroupDim>("category");
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  // manual reclassification rules (merchant -> group + category), persisted
   const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
-  // {who, n}: n is a nonce so re-clicking the same merchant re-fires the prefill
   const [assignReq, setAssignReq] = useState<{ who: string; n: number } | null>(null);
+  const [groups, setGroups] = useState<GroupDef[]>(() => loadGroups());
+  const [tab, setTab] = useLocalStorageState<"dashboard" | "configure">("spend.tab", "dashboard");
 
   useEffect(() => saveOverrides(overrides), [overrides]);
+  useEffect(() => saveGroups(groups), [groups]);
+  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
-  // apply theme to the document
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  // load the bundled sample on first run so there's always something to look at
   useEffect(() => {
     fetch(import.meta.env.BASE_URL + "sample-statement.csv")
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error("no sample"))))
       .then((text) => load("sample-statement.csv", text))
-      .catch(() => setError(null)); // fine — user can drop a file
+      .catch(() => setError(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -65,55 +60,50 @@ export default function App() {
       setParsed(result);
       setFileName(name);
       setFilters(defaultFilters(boundsOf(result.txns)));
-      setExcluded(new Set()); // fresh data → nothing excluded
+      setExcluded(new Set());
       setError(result.txns.length === 0 ? "No transactions were recognised in this file." : null);
     } catch (e) {
       setError(`Could not parse ${name}: ${(e as Error).message}`);
     }
   };
 
-  // raw parsed txns, then apply manual overrides → everything downstream uses `txns`
+  // raw parsed txns → apply manual overrides (resolved against the group config)
   const rawTxns = parsed?.txns ?? [];
-  const txns = useMemo(() => applyOverrides(rawTxns, overrides), [rawTxns, overrides]);
+  const txns = useMemo(() => applyOverrides(rawTxns, overrides, groups), [rawTxns, overrides, groups]);
   const currency = parsed?.currency ?? "";
   const bounds = useMemo(() => boundsOf(txns), [txns]);
 
-  // filters produce `filtered`; the include/exclude table further removes whole
-  // groups, producing `active` — which feeds every chart, tile and total.
-  const filtered = useMemo(
-    () => (filters ? applyFilters(txns, filters) : txns),
-    [txns, filters]
-  );
+  const gmap = useMemo(() => groupMap(groups), [groups]);
+  const groupLabelMap = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g.label])), [groups]);
+
+  const filtered = useMemo(() => (filters ? applyFilters(txns, filters) : txns), [txns, filters]);
   const active = useMemo(
     () => (excluded.size ? filtered.filter((t) => !excluded.has(groupKeyOf(t, groupBy))) : filtered),
     [filtered, excluded, groupBy]
   );
 
-  const model = useMemo(() => buildSankey(active, minFlowPct), [active, minFlowPct]);
+  const model = useMemo(() => buildSankey(active, minFlowPct, groups), [active, minFlowPct, groups]);
   const stats = useMemo(() => computeStats(active), [active]);
   const monthly = useMemo(() => monthlySeries(active), [active]);
   const cats = useMemo(() => topCategories(active), [active]);
   const merchants = useMemo(() => topMerchants(active), [active]);
   const recur = useMemo(() => recurring(active), [active]);
 
-  // stable option lists from the whole dataset
-  const groupOptions = useMemo(
-    () => GROUP_ORDER.filter((g) => txns.some((t) => t.group === g)),
-    [txns]
-  );
+  const groupOptions = useMemo(() => groups.filter((g) => txns.some((t) => t.group === g.id)), [groups, txns]);
   const categoryOptions = useMemo(() => {
     const tot = new Map<string, number>();
     for (const t of txns) tot.set(t.category, (tot.get(t.category) ?? 0) + t.amount);
     return [...tot.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
   }, [txns]);
-  const tagOptions = useMemo(
-    () => BEHAVIOURAL_TAGS.filter((tag) => txns.some((t) => t.tags.includes(tag))),
-    [txns]
-  );
-
+  const tagOptions = useMemo(() => BEHAVIOURAL_TAGS.filter((tag) => txns.some((t) => t.tags.includes(tag))), [txns]);
   const uncategorized = useMemo(() => txns.filter((t) => t.category === "Other").length, [txns]);
   const merchantList = useMemo(() => distinctMerchants(txns), [txns]);
   const categoryList = useMemo(() => categoriesWithGroup(txns), [txns]);
+  const groupUsage = useMemo(() => {
+    const u: Record<string, number> = {};
+    for (const t of txns) u[t.group] = (u[t.group] ?? 0) + 1;
+    return u;
+  }, [txns]);
 
   if (!filters) {
     return (
@@ -131,7 +121,7 @@ export default function App() {
           </div>
           <ul className="splash-points">
             <li><span>🔒</span> 100% local — your statement is parsed in your browser and never uploaded</li>
-            <li><span>🏦</span> Built for Banca Transilvania / ING Romania exports; also reads generic CSVs</li>
+            <li><span>🏦</span> Reads Banca Transilvania / ING Romania &amp; Revolut exports, plus generic CSVs</li>
             <li><span>🏷️</span> Auto-tags spending into categories and flags recurring bills &amp; subscriptions</li>
           </ul>
           {error && <p className="error">{error}</p>}
@@ -141,41 +131,37 @@ export default function App() {
   }
 
   const patch = (p: Partial<Filters>) => setFilters((f) => ({ ...(f as Filters), ...p }));
-  const reset = () => {
-    setFilters(defaultFilters(bounds));
-    setExcluded(new Set());
-  };
+  const reset = () => { setFilters(defaultFilters(bounds)); setExcluded(new Set()); };
 
-  // include/exclude table handlers
   const toggleGroup = (key: string) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+    setExcluded((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
   const setManyGroups = (keys: string[], included: boolean) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      for (const k of keys) (included ? next.delete(k) : next.add(k));
-      return next;
-    });
-  const changeGroupBy = (d: GroupDim) => {
-    if (d === groupBy) return; // no-op click must not wipe selections
-    setGroupBy(d);
-    setExcluded(new Set()); // keys are dimension-specific; start fresh
-  };
+    setExcluded((prev) => { const next = new Set(prev); for (const k of keys) (included ? next.delete(k) : next.add(k)); return next; });
+  const changeGroupBy = (d: GroupDim) => { if (d === groupBy) return; setGroupBy(d); setExcluded(new Set()); };
 
-  // manual override handlers
-  const setOverride = (who: string, group: Group, category: string) =>
-    setOverrides((o) => ({ ...o, [who]: { group, category } }));
-  const removeOverride = (who: string) =>
-    setOverrides((o) => {
-      const next = { ...o };
-      delete next[who];
-      return next;
-    });
+  const setOverride = (who: string, group: Group, category: string) => setOverrides((o) => ({ ...o, [who]: { group, category } }));
+  const removeOverride = (who: string) => setOverrides((o) => { const n = { ...o }; delete n[who]; return n; });
   const clearOverrides = () => setOverrides({});
-  const assign = (who: string) => setAssignReq((prev) => ({ who, n: (prev?.n ?? 0) + 1 }));
+  const assign = (who: string) => { setTab("configure"); setAssignReq((prev) => ({ who, n: (prev?.n ?? 0) + 1 })); };
+
+  // group CRUD
+  const addGroup = (label: string, kind: GroupKind) =>
+    setGroups((gs) => [...gs, { id: slugId(label, new Set(gs.map((g) => g.id))), label, kind, colorVar: nextColorVar(gs), builtin: false }]);
+  const renameGroup = (id: string, label: string) => setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, label } : g)));
+  const recolorGroup = (id: string, colorVar: string) => setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, colorVar } : g)));
+  const changeKind = (id: string, kind: GroupKind) => setGroups((gs) => gs.map((g) => (g.id === id && !g.builtin ? { ...g, kind } : g)));
+  const deleteGroup = (id: string) => {
+    setGroups((gs) => gs.filter((g) => g.id !== id || g.builtin));
+    // any rule pointing at the deleted group reverts to Optional
+    setOverrides((o) => {
+      const n: Overrides = {};
+      for (const [k, v] of Object.entries(o)) n[k] = v.group === id ? { ...v, group: "optional" } : v;
+      return n;
+    });
+    // scrub the dead id from live scoping state so the dashboard can't go blank
+    setFilters((f) => (f ? { ...f, groups: f.groups.filter((g) => g !== id) } : f));
+    setExcluded((prev) => { const nx = new Set(prev); nx.delete(id); return nx; });
+  };
 
   const catItems: BarItem[] = cats.map((c) => ({
     key: `${c.group}:${c.category}`,
@@ -183,14 +169,9 @@ export default function App() {
     icon: iconFor(c.category),
     sub: `${c.count}×`,
     value: c.total,
-    colorKey: c.group,
+    colorKey: gmap.get(c.group)?.colorVar ?? c.group,
   }));
-  const merchItems: BarItem[] = merchants.map((m) => ({
-    key: m.who,
-    label: m.who,
-    sub: m.category,
-    value: m.total,
-  }));
+  const merchItems: BarItem[] = merchants.map((m) => ({ key: m.who, label: m.who, sub: m.category, value: m.total }));
 
   const exportCsv = () => {
     const head = ["date", "who", "group", "category", "direction", "tags", "debit", "credit", "amount"];
@@ -200,9 +181,7 @@ export default function App() {
     const blob = new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "spending-tagged.csv";
-    a.click();
+    a.href = url; a.download = "spending-tagged.csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -217,6 +196,10 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <div className="segmented tabs">
+            <button className={tab === "dashboard" ? "on" : ""} onClick={() => setTab("dashboard")}>📊 Dashboard</button>
+            <button className={tab === "configure" ? "on" : ""} onClick={() => setTab("configure")}>⚙︎ Configure</button>
+          </div>
           <span className="privacy" title="All parsing happens in your browser. Nothing is uploaded.">🔒 100% local</span>
           <FileLoader onLoad={load} compact />
           <button className="btn-ghost" onClick={exportCsv}>Export CSV</button>
@@ -227,116 +210,114 @@ export default function App() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
-      {parsed?.warnings.map((w, i) => (
-        <div className="banner warn" key={i}>{w}</div>
-      ))}
+      {parsed?.warnings.map((w, i) => <div className="banner warn" key={i}>{w}</div>)}
 
-      <FilterBar
-        filters={filters}
-        bounds={bounds}
-        groups={groupOptions}
-        categories={categoryOptions}
-        tags={tagOptions}
-        onChange={patch}
-        onReset={reset}
-        filtered={isFiltered(filters, bounds)}
-      />
+      {tab === "configure" ? (
+        <>
+          <Card id="groups-config" title="Top-level groups" subtitle="Create, rename, recolour or delete the buckets your money flows into. A group’s behaviour sets its side of the flow (income / spending / savings).">
+            <GroupsPanel
+              groups={groups}
+              usage={groupUsage}
+              onAdd={addGroup}
+              onRename={renameGroup}
+              onRecolor={recolorGroup}
+              onChangeKind={changeKind}
+              onDelete={deleteGroup}
+            />
+          </Card>
+          <Card id="custom-rules" title="Custom categories & rules" subtitle="Assign a group + category to an entire merchant — it overrides the automatic tagging everywhere. Type a new category name to create one. Saved in this browser.">
+            <RulesPanel
+              merchants={merchantList}
+              categories={categoryList}
+              groups={groups}
+              overrides={overrides}
+              onSet={setOverride}
+              onRemove={removeOverride}
+              onClear={clearOverrides}
+              focusMerchant={assignReq}
+            />
+          </Card>
+        </>
+      ) : (
+        <>
+          <FilterBar
+            filters={filters}
+            bounds={bounds}
+            groups={groupOptions}
+            categories={categoryOptions}
+            tags={tagOptions}
+            onChange={patch}
+            onReset={reset}
+            filtered={isFiltered(filters, bounds)}
+          />
 
-      <StatTiles stats={stats} currency={currency} />
+          <StatTiles stats={stats} currency={currency} />
 
-      <section className="card">
-        <div className="card-head">
-          <div>
-            <h2>Groups — include or exclude</h2>
-            <p className="card-sub">Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.</p>
+          <Card id="groups-exclude" title="Groups — include or exclude" subtitle="Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.">
+            <GroupedTable
+              txns={filtered}
+              currency={currency}
+              dim={groupBy}
+              onDimChange={changeGroupBy}
+              excluded={excluded}
+              onToggle={toggleGroup}
+              onSetMany={setManyGroups}
+              overrides={overrides}
+              onAssign={assign}
+              groupLabels={groupLabelMap}
+            />
+          </Card>
+
+          <Card
+            id="money-flow"
+            className="sankey-card"
+            title="Money flow"
+            subtitle="Income → available → where it goes. Click a group or category to filter. Transfers between your own accounts are hidden until you enable “Internal”."
+            actions={
+              <label className="slider">
+                Hide flows under {(minFlowPct * 100).toFixed(1)}%
+                <input type="range" min={0} max={0.05} step={0.0025} value={minFlowPct} onChange={(e) => setMinFlowPct(Number(e.target.value))} />
+              </label>
+            }
+          >
+            <Sankey
+              model={model}
+              currency={currency}
+              onPickGroup={(id) => patch({ groups: [id] })}
+              onPickCategory={(category) => patch({ categories: [category] })}
+            />
+          </Card>
+
+          <div className="grid-2">
+            <Card id="monthly" title="Monthly in vs out"><MonthlyTrend data={monthly} currency={currency} /></Card>
+            <Card id="top-categories" title="Top categories">
+              <BarList items={catItems} currency={currency} empty="No spending in this view." onPick={(it) => patch({ categories: [it.label] })} />
+            </Card>
           </div>
-        </div>
-        <GroupedTable
-          txns={filtered}
-          currency={currency}
-          dim={groupBy}
-          onDimChange={changeGroupBy}
-          excluded={excluded}
-          onToggle={toggleGroup}
-          onSetMany={setManyGroups}
-          overrides={overrides}
-          onAssign={assign}
-        />
-      </section>
 
-      <section className="card">
-        <div className="card-head">
-          <div>
-            <h2>Custom categories &amp; rules</h2>
-            <p className="card-sub">Assign a group + category to an entire merchant — it overrides the automatic tagging everywhere. Type a new category name to create one. Rules are saved in this browser.</p>
+          <div className="grid-2">
+            <Card id="top-merchants" title="Top merchants">
+              <BarList items={merchItems} currency={currency} empty="No merchants in this view." onPick={(it) => patch({ search: it.label })} />
+            </Card>
+            <Card id="recurring" title="Recurring & subscriptions"><RecurringPanel items={recur} currency={currency} /></Card>
           </div>
-        </div>
-        <RulesPanel
-          merchants={merchantList}
-          categories={categoryList}
-          overrides={overrides}
-          onSet={setOverride}
-          onRemove={removeOverride}
-          onClear={clearOverrides}
-          focusMerchant={assignReq}
-        />
-      </section>
 
-      <section className="card sankey-card">
-        <div className="card-head">
-          <div>
-            <h2>Money flow</h2>
-            <p className="card-sub">Income → available → where it goes. Click a group or category to filter. Transfers between your own accounts are hidden until you enable “Internal”.</p>
-          </div>
-          <label className="slider">
-            Hide flows under {(minFlowPct * 100).toFixed(1)}%
-            <input type="range" min={0} max={0.05} step={0.0025} value={minFlowPct} onChange={(e) => setMinFlowPct(Number(e.target.value))} />
-          </label>
-        </div>
-        <Sankey
-          model={model}
-          currency={currency}
-          onPickGroup={(label) => patch({ groups: [LABEL_TO_GROUP[label]] })}
-          onPickCategory={(category) => patch({ categories: [category] })}
-        />
-      </section>
+          <Card
+            id="transactions"
+            title="Transactions"
+            subtitle={`${active.length.toLocaleString("en-US")} counted${excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details`}
+          >
+            <TransactionTable txns={active} currency={currency} groupLabels={groupLabelMap} />
+          </Card>
 
-      <div className="grid-2">
-        <section className="card">
-          <div className="card-head"><h2>Monthly in vs out</h2></div>
-          <MonthlyTrend data={monthly} currency={currency} />
-        </section>
-        <section className="card">
-          <div className="card-head"><h2>Top categories</h2></div>
-          <BarList items={catItems} currency={currency} empty="No spending in this view." onPick={(it) => patch({ categories: [it.label] })} />
-        </section>
-      </div>
-
-      <div className="grid-2">
-        <section className="card">
-          <div className="card-head"><h2>Top merchants</h2></div>
-          <BarList items={merchItems} currency={currency} empty="No merchants in this view." onPick={(it) => patch({ search: it.label })} />
-        </section>
-        <section className="card">
-          <div className="card-head"><h2>Recurring & subscriptions</h2></div>
-          <RecurringPanel items={recur} currency={currency} />
-        </section>
-      </div>
-
-      <section className="card">
-        <div className="card-head">
-          <h2>Transactions</h2>
-          <span className="card-sub">{active.length.toLocaleString("en-US")} counted{excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details</span>
-        </div>
-        <TransactionTable txns={active} currency={currency} />
-      </section>
-
-      <footer className="foot">
-        <span>{txns.length.toLocaleString("en-US")} transactions parsed as <b>{parsed?.format}</b>.</span>
-        <span>{uncategorized} uncategorised ({txns.length ? ((uncategorized / txns.length) * 100).toFixed(0) : 0}%) — these show as “Other”.</span>
-        <span>Everything runs in your browser; your statement never leaves this machine.</span>
-        <span className="foot-total">Filtered total out: {money2(stats.totalOut, currency)}</span>
-      </footer>
+          <footer className="foot">
+            <span>{txns.length.toLocaleString("en-US")} transactions parsed as <b>{parsed?.format}</b>.</span>
+            <span>{uncategorized} uncategorised ({txns.length ? ((uncategorized / txns.length) * 100).toFixed(0) : 0}%) — these show as “Other”.</span>
+            <span>Everything runs in your browser; your statement never leaves this machine.</span>
+            <span className="foot-total">Filtered total out: {money2(stats.totalOut, currency)}</span>
+          </footer>
+        </>
+      )}
     </div>
   );
 }

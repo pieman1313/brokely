@@ -1,12 +1,11 @@
-import type { Direction, Group } from "../types";
-import { GROUP_LABELS } from "../types";
+import type { Direction, GroupDef } from "../types";
 import type { DataBounds, Filters } from "../lib/filters";
 import { dateLabel } from "../lib/format";
 
 interface Props {
   filters: Filters;
   bounds: DataBounds;
-  groups: Group[];
+  groups: GroupDef[];
   categories: string[];
   tags: string[];
   onChange: (patch: Partial<Filters>) => void;
@@ -112,11 +111,12 @@ export default function FilterBar({ filters, bounds, groups, categories, tags, o
           <div className="chips">
             {groups.map((g) => (
               <button
-                key={g}
-                className={`chip grp-${g} ${filters.groups.includes(g) ? "on" : ""}`}
-                onClick={() => onChange({ groups: toggleArr(filters.groups, g) })}
+                key={g.id}
+                style={{ ["--chip-accent" as string]: `var(--g-${g.colorVar})` }}
+                className={`chip ${filters.groups.includes(g.id) ? "on" : ""}`}
+                onClick={() => onChange({ groups: toggleArr(filters.groups, g.id) })}
               >
-                {GROUP_LABELS[g]}
+                {g.label}
               </button>
             ))}
           </div>

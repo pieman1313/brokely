@@ -2,6 +2,8 @@
 import { parseStatement } from "../src/lib/parse";
 import { applyOverrides } from "../src/lib/overrides";
 import { computeStats } from "../src/lib/analytics";
+import { buildSankey } from "../src/lib/sankey-model";
+import { BUILTIN_GROUPS } from "../src/types";
 
 let fail = 0;
 function check(name: string, cond: boolean, extra = "") {
@@ -108,7 +110,7 @@ Salary Corp,2026-06-06,3000.00`;
     "Card Payment,Current,2026-01-07 10:00:00,2026-01-07 10:00:00,ACME Store,-30,0,RON,COMPLETED,0",
   ].join("\n");
   const base = parseStatement(csv).txns;
-  const eff = applyOverrides(base, { "ACME Store": { group: "optional", category: "Shopping & retail" } });
+  const eff = applyOverrides(base, { "ACME Store": { group: "optional", category: "Shopping & retail" } }, BUILTIN_GROUPS);
   const s = computeStats(eff);
   const shopping = eff.filter((t) => t.category === "Shopping & retail");
   const refund = eff.find((t) => t.credit > 0);
@@ -118,6 +120,22 @@ Salary Corp,2026-06-06,3000.00`;
       !!refund && refund.group === "income" && refund.direction === "in" &&
       Math.round(s.totalOut) === 130 && Math.round(s.totalIn) === 40,
     `out=${s.totalOut} in=${s.totalIn} shopping=${shopping.length} refundGroup=${refund?.group}`
+  );
+}
+
+// 10) a CUSTOM top-level group works end-to-end (override → kind → Sankey node)
+{
+  const csv = "Date,Description,Amount\n2026-01-05,Acme Broker,-500\n2026-01-06,Acme Broker,-250";
+  const base = parseStatement(csv).txns;
+  const groups = [...BUILTIN_GROUPS, { id: "grp-invest", label: "Investments", kind: "spend" as const, colorVar: "custom-1", builtin: false }];
+  const eff = applyOverrides(base, { "Acme Broker": { group: "grp-invest", category: "Brokerage" } }, groups);
+  const model = buildSankey(eff, 0, groups);
+  const groupNode = model.nodes.find((n) => n.kind === "group" && n.label === "Investments");
+  check(
+    "custom group: assigned, spend-kind, own Sankey node with its colour",
+    eff.every((t) => t.group === "grp-invest" && t.kind === "spend" && t.direction === "out") &&
+      !!groupNode && groupNode.colorKey === "custom-1" && Math.round(model.totalOut) === 750,
+    `group=${eff[0]?.group} kind=${eff[0]?.kind} node=${groupNode?.label}/${groupNode?.colorKey}`
   );
 }
 

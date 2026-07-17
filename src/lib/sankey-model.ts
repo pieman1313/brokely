@@ -2,24 +2,23 @@
 //
 // Shape (left -> right):
 //   income sources  ->  "Available"  ->  spend groups  ->  categories
-//                                    ->  "Unspent"  (when income > outflow)
+//                                    ->  "Left over"  (when income > outflow)
 //   "Reserves"      ->  "Available"                   (when outflow > income)
 //
 // The hub is balanced (inflow == outflow) so the diagram reads as a true flow.
+// The income/outflow split is by group KIND, so custom groups work too.
 
-import type { Group, Txn } from "../types";
-import { GROUP_LABELS } from "../types";
+import type { GroupDef, Txn } from "../types";
+import { groupMap } from "./groups";
 
 export type NodeKind = "income" | "hub" | "group" | "category" | "surplus" | "deficit";
 
 export interface SNode {
-  /** stable unique id */
   id: string;
   label: string;
   kind: NodeKind;
-  /** css-variable colour key: income|required|optional|transfers|savings|hub|surplus|deficit */
+  /** css-variable colour slot: resolved as var(--g-<colorKey>) */
   colorKey: string;
-  /** total value flowing through this node (for tooltip) */
   value: number;
 }
 
@@ -40,25 +39,23 @@ export interface SankeyModel {
 
 const HUB_LABEL = "Available";
 
-/** group -> css colour key (categories inherit their group's colour). */
-function colorKeyForGroup(g: Group): string {
-  return g; // css vars are named --g-income, --g-required, ...
-}
+export function buildSankey(txns: Txn[], minFlowPct = 0, groups: GroupDef[] = []): SankeyModel {
+  const gmap = groupMap(groups);
+  const colorOf = (groupId: string, fallback: string) => gmap.get(groupId)?.colorVar ?? fallback;
 
-export function buildSankey(txns: Txn[], minFlowPct = 0): SankeyModel {
-  const incomeByCat = new Map<string, number>();
-  const outByGroup = new Map<Group, number>();
+  const incomeByCat = new Map<string, { value: number; colorVar: string }>();
+  const outByGroup = new Map<string, number>();
   const outByGroupCat = new Map<string, number>(); // key: `${group}::${cat}`
 
   let totalIn = 0;
   let totalOut = 0;
 
   for (const t of txns) {
-    // returning own money (internal credit legs) is neither income nor an
-    // outflow — skip it so it doesn't double-count against its outgoing leg.
+    // returning own money (internal credit legs) is neither income nor an outflow
     if (t.direction === "internal" && t.credit > 0) continue;
-    if (t.group === "income") {
-      incomeByCat.set(t.category, (incomeByCat.get(t.category) ?? 0) + t.amount);
+    if (t.kind === "income") {
+      const prev = incomeByCat.get(t.category);
+      incomeByCat.set(t.category, { value: (prev?.value ?? 0) + t.amount, colorVar: prev?.colorVar ?? colorOf(t.group, "income") });
       totalIn += t.amount;
     } else {
       outByGroup.set(t.group, (outByGroup.get(t.group) ?? 0) + t.amount);
@@ -74,7 +71,6 @@ export function buildSankey(txns: Txn[], minFlowPct = 0): SankeyModel {
   const nodes: SNode[] = [];
   const links: SLink[] = [];
   const index = new Map<string, number>();
-
   const addNode = (n: SNode): number => {
     if (index.has(n.id)) return index.get(n.id)!;
     const i = nodes.length;
@@ -89,51 +85,55 @@ export function buildSankey(txns: Txn[], minFlowPct = 0): SankeyModel {
 
   // ---- income sources -> hub (collapse tiny sources into "Other income") ----
   {
-    const merged = new Map<string, number>();
-    for (const [cat, v] of incomeByCat) {
-      const key = v < threshold && cat !== "Salary" ? "Other income" : cat;
-      merged.set(key, (merged.get(key) ?? 0) + v);
+    const merged = new Map<string, { value: number; colorVar: string }>();
+    for (const [cat, { value, colorVar }] of incomeByCat) {
+      const small = value < threshold && cat !== "Salary";
+      const key = small ? "Other income" : cat;
+      const prev = merged.get(key);
+      merged.set(key, { value: (prev?.value ?? 0) + value, colorVar: prev?.colorVar ?? (small ? "income" : colorVar) });
     }
-    for (const [cat, v] of merged) {
-      if (v <= 0) continue;
-      const ni = addNode({ id: `inc::${cat}`, label: cat, kind: "income", colorKey: "income", value: v });
-      links.push({ source: ni, target: hub, value: v, colorKey: "income" });
+    for (const [cat, { value, colorVar }] of merged) {
+      if (value <= 0) continue;
+      const ni = addNode({ id: `inc::${cat}`, label: cat, kind: "income", colorKey: colorVar, value });
+      links.push({ source: ni, target: hub, value, colorKey: colorVar });
     }
   }
 
   // ---- balancing source / sink ----
   if (totalOut > totalIn) {
-    // deficit: money came from reserves / prior balance
     const label = totalIn === 0 ? "Money out" : "Reserves / balance";
     const di = addNode({ id: "deficit", label, kind: "deficit", colorKey: "deficit", value: totalOut - totalIn });
     links.push({ source: di, target: hub, value: totalOut - totalIn, colorKey: "deficit" });
   }
 
-  // ---- hub -> groups -> categories ----
-  const GROUP_RENDER_ORDER: Group[] = ["required", "optional", "transfers", "savings"];
-  for (const g of GROUP_RENDER_ORDER) {
-    const gTotal = outByGroup.get(g) ?? 0;
-    if (gTotal <= 0) continue;
-    const gi = addNode({ id: `grp::${g}`, label: GROUP_LABELS[g], kind: "group", colorKey: colorKeyForGroup(g), value: gTotal });
-    links.push({ source: hub, target: gi, value: gTotal, colorKey: colorKeyForGroup(g) });
+  // ---- hub -> groups -> categories (outflow = every non-income group, in config order) ----
+  const outGroups = groups.filter((g) => g.kind !== "income" && (outByGroup.get(g.id) ?? 0) > 0);
+  // include any groups present in data but missing from config (safety)
+  for (const id of outByGroup.keys()) if (!gmap.has(id)) outGroups.push({ id, label: id, kind: "spend", colorVar: id });
 
-    // categories within this group
+  for (const g of outGroups) {
+    const gTotal = outByGroup.get(g.id) ?? 0;
+    if (gTotal <= 0) continue;
+    const color = g.colorVar;
+    const gi = addNode({ id: `grp::${g.id}`, label: g.label, kind: "group", colorKey: color, value: gTotal });
+    links.push({ source: hub, target: gi, value: gTotal, colorKey: color });
+
     let collapsed = 0;
     const kept: [string, number][] = [];
     for (const [k, v] of outByGroupCat) {
-      if (!k.startsWith(`${g}::`)) continue;
-      const cat = k.slice(g.length + 2);
+      if (!k.startsWith(`${g.id}::`)) continue;
+      const cat = k.slice(g.id.length + 2);
       if (v < threshold) collapsed += v;
       else kept.push([cat, v]);
     }
     for (const [cat, v] of kept) {
       if (v <= 0) continue;
-      const ci = addNode({ id: `cat::${g}::${cat}`, label: cat, kind: "category", colorKey: colorKeyForGroup(g), value: v });
-      links.push({ source: gi, target: ci, value: v, colorKey: colorKeyForGroup(g) });
+      const ci = addNode({ id: `cat::${g.id}::${cat}`, label: cat, kind: "category", colorKey: color, value: v });
+      links.push({ source: gi, target: ci, value: v, colorKey: color });
     }
     if (collapsed > 0) {
-      const ci = addNode({ id: `cat::${g}::__other`, label: "Other (small)", kind: "category", colorKey: colorKeyForGroup(g), value: collapsed });
-      links.push({ source: gi, target: ci, value: collapsed, colorKey: colorKeyForGroup(g) });
+      const ci = addNode({ id: `cat::${g.id}::__other`, label: "Other (small)", kind: "category", colorKey: color, value: collapsed });
+      links.push({ source: gi, target: ci, value: collapsed, colorKey: color });
     }
   }
 

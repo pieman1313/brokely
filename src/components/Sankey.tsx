@@ -7,6 +7,7 @@ import {
 } from "d3-sankey";
 import type { SankeyModel, SNode, SLink } from "../lib/sankey-model";
 import { compact, money } from "../lib/format";
+import { exportSvgPng } from "../lib/export-image";
 
 interface Props {
   model: SankeyModel;
@@ -29,6 +30,7 @@ const NODE_PAD = 13;
 
 export default function Sankey({ model, currency, onPickGroup, onPickCategory }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [width, setWidth] = useState(900);
   const [hover, setHover] = useState<
     | { kind: "node"; i: number; x: number; y: number }
@@ -93,13 +95,21 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
   const total = Math.max(model.totalIn, model.totalOut, 1);
 
   const clickNode = (n: LayoutNode) => {
-    if (n.kind === "group") onPickGroup?.(n.label);
+    // group nodes carry id "grp::<id>" — filter by the id, never the human label
+    if (n.kind === "group") onPickGroup?.(n.id.startsWith("grp::") ? n.id.slice(5) : n.label);
     else if (n.kind === "category" && n.label !== "Other (small)") onPickCategory?.(n.label);
   };
 
   return (
     <div ref={wrapRef} className="sankey-wrap">
-      <svg width={width} height={height} role="img" aria-label="Money flow diagram">
+      <button
+        className="btn-ghost sankey-export"
+        title="Download the diagram as a PNG"
+        onClick={() => { if (svgRef.current) exportSvgPng(svgRef.current, "money-flow.png").catch((err) => console.error("Sankey export failed:", err)); }}
+      >
+        ⤓ Export image
+      </button>
+      <svg ref={svgRef} width={width} height={height} role="img" aria-label="Money flow diagram">
         {/* links */}
         <g fill="none">
           {graph.links.map((l, i) => (

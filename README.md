@@ -33,6 +33,15 @@ npm run preview  # serve the production build
   (required / optional / to-people / savings / income) and a category
   (groceries, eating out, utilities, …) by a merchant ruleset, and given
   behavioural tags: `#recurring`, `#large`, `#weekend`, `#cash`, `#internal`.
+- **Dashboard / Configure split** — a top-level tab separates exploring your data
+  (Dashboard) from shaping it (Configure). Every card collapses, and its state is
+  remembered per browser (collapsed cards aren't rendered).
+- **Custom top-level groups** — create, rename, recolour or delete the buckets your
+  money flows into (Configure → Top-level groups). A group's *behaviour*
+  (income / spending / to-people / savings) decides which side of the flow it sits
+  on, so custom groups get their own Sankey branch. Built-ins can't be deleted.
+- **Export** — download the money-flow Sankey as a PNG, or the tagged transactions
+  as CSV. Long tables render only their on-screen rows, so thousands stay smooth.
 - **Custom categories & rules** — manually assign a group + category to an entire
   merchant, overriding the automatic tagging everywhere (type a new category name
   to create one). Rules persist in your browser; assign directly from the

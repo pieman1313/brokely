@@ -9,6 +9,7 @@
 
 import Papa from "papaparse";
 import type { ParseResult, Txn } from "../types";
+import { BUILTIN_KIND } from "../types";
 import { baseTags, buildSelfMatcher, categorize, categorizeRevolut, cleanMerchant, enrichTags } from "./tagging";
 
 const RO_MONTHS: Record<string, number> = {
@@ -146,6 +147,7 @@ function parseBT(rows: string[][]): ParseResult {
       amount: b.credit > 0 ? b.credit : b.debit,
       who: cat.who,
       group: cat.group,
+      kind: BUILTIN_KIND[cat.group] ?? "spend",
       category: cat.category,
       direction: cat.direction,
       tags: baseTags(cat, b.dateISO),
@@ -207,6 +209,7 @@ function parseRevolut(text: string): ParseResult {
       // never leave a blank counterparty — it must round-trip as an override key
       who: cat.who || (row["Type"] ?? "").trim() || "Unknown",
       group: cat.group,
+      kind: BUILTIN_KIND[cat.group] ?? "spend",
       category: cat.category,
       direction: cat.direction,
       tags: baseTags(cat, dateISO),
@@ -339,6 +342,7 @@ function parseGeneric(text: string): ParseResult {
       amount: credit > 0 ? credit : debit,
       who: cat.who || desc,
       group: cat.group,
+      kind: BUILTIN_KIND[cat.group] ?? "spend",
       category: cat.category,
       direction: cat.direction,
       tags: baseTags(cat, dateISO),
