@@ -96,7 +96,7 @@ const MERCHANT_RULES: Rule[] = [
   [/EON\.?RO|E\.ON|ENGIE|\bGAZ\b|GAZ NATURAL|DISTRIGAZ/, "required", "Gas"],
   [/AQUATIM|APA NOVA|APA CANAL|APAVITAL/, "required", "Water"],
   [/RETIM|SALUBR|BRAI-?CATA|GARBAGE/, "required", "Garbage"],
-  [/DIGI ROMANIA|RCS|RDS|VODAFONE.*NET|TELEKOM.*NET/, "required", "Internet & TV"],
+  [/DIGI ROMANIA|\bDIGI\b|RCS|RDS|VODAFONE.*NET|TELEKOM.*NET/, "required", "Internet & TV"],
   [/ORANGE\.?RO|ORANGE ROMANIA|VODAFONE|TELEKOM|DIGI MOBIL/, "required", "Mobile"],
   [/E-?BLOC|ASOCIATIA DE PROPRIET|ADMINISTRA(RE|TIE)/, "required", "Building admin"],
   [/ALLIANZ-?TIRIAC|GENERALI|GROUPAMA|OMNIASIG|ASIROM|CITY INSURANCE|SAFETY BROKER/, "required", "Insurance"],
@@ -110,7 +110,7 @@ const MERCHANT_RULES: Rule[] = [
 
   // ---- Optional: discretionary ----
   [
-    /BBQ RIBS|BELLA ITALIA|BERARIA|BISTRO|BOOM PUB|BREWNO|CHINESE FAST FOOD|CURTEA BERII|IRISH PUBLIC|LERA S MAR|PEPPER-?STEAK|PLATANO TAPAS|SEGAR FOOD|STAROPRAMEN|VINERI 15|TASTE OF BALI|DOME COFFEE|Q COFFEE|ZONE CAFE|MAKRA LANGOS|MASINA CU CLATITE|CRAZY DONUT|ADRIENNS|KOVACS|SWEETS TRUCK|FORESTGRILL|GRUPER CATERING|FOODIEBUCATARUL|LEONAALEX|COPOS HORECA|NCA DRINKS|RED HAT EVENTS|BUORMO|RESTAURANT|PIZZA|KFC|MCDONALD|BURGER|STARBUCKS|COFFEE|CAFE|GLOVO|TAZZ|FOOD ?PANDA|BOLT ?FOOD|WOLT|5 TO GO/,
+    /BBQ RIBS|BELLA ITALIA|BERARIA|BISTRO|BOOM PUB|BREWNO|CHINESE FAST FOOD|CURTEA BERII|IRISH PUBLIC|LERA S MAR|PEPPER-?STEAK|PLATANO TAPAS|SEGAR FOOD|STAROPRAMEN|VINERI 15|TASTE OF BALI|DOME COFFEE|Q COFFEE|ZONE CAFE|MAKRA LANGOS|MASINA CU CLATITE|CRAZY DONUT|ADRIENNS|KOVACS|SWEETS TRUCK|FORESTGRILL|GRUPER CATERING|FOODIEBUCATARUL|LEONAALEX|COPOS HORECA|NCA DRINKS|RED HAT EVENTS|BUORMO|RESTAURANT|PIZZA|KFC|MCDONALD|BURGER|STARBUCKS|COFFEE|CAFE|GLOVO|TAZZ|FOOD ?PANDA|BOLT ?FOOD|WOLT|5 TO GO|RESTAURANG|TRATTORIA|OSTERIA|BRASSERIE|STEAKHOUSE/,
     "optional",
     "Eating out & cafés",
   ],
@@ -121,14 +121,24 @@ const MERCHANT_RULES: Rule[] = [
   ],
   [/HORNBACH|DEDEMAN|LEROY MERLIN|IKEA|JYSK|MOEMAX|DEPOZIT MIRCEA|BRICO|ARABESQUE|AMBIENT|MOBEXPERT/, "optional", "Home & DIY"],
   [/ALTEX|MEDIA GALAXY|EMAG|EVOMAG|F64|LIBRISTO|PEPCO|TEDI|SM OFFICE|DIAGOLD|FLANCO|PC GARAGE|CEL\.?RO|NOTINO|DOUGLAS|SEPHORA|H ?& ?M|ZARA|C&A|LC WAIKIKI|SINSAY|RESERVED|DEICHMANN|CCC|ABOUT YOU|ANSWEAR|FASHION DAYS|LIBRARIE|CARTURESTI/, "optional", "Shopping & retail"],
-  [/OMV|LUKOIL|MOL |SAFARIWASH|1MINUTEAERO|ALLMONDOCAR|ROVIGNETA|VROOM|PAUL MOTO|ATV CENTER|MOTO MUS|AMANO|ALPHA PARKING|BOLT\.EU|IULIUS MALL|ATTRIUS|ADP|PETROM|ROMPETROL|SOCAR|GAZPROM|MOTORPARK|UBER|FREE ?NOW|CFR|TAROM|WIZZ|BLUE ?AIR|RYANAIR|AUTOSTRADA|PARKING|PARCARE|CARWASH|SPALATORIE/, "optional", "Car & transport"],
+  [/OMV|LUKOIL|\bMOL\b|SAFARIWASH|1MINUTEAERO|ALLMONDOCAR|ROVIGNETA|VROOM|PAUL MOTO|ATV CENTER|MOTO MUS|AMANO|ALPHA PARKING|BOLT\.EU|IULIUS MALL|ATTRIUS|ADP|PETROM|ROMPETROL|SOCAR|GAZPROM|MOTORPARK|UBER|BOLT|FREE ?NOW|CFR|AUTOSTRADA|PARKING|PARCARE|CARWASH|SPALATORIE/, "optional", "Car & transport"],
   [/DECATHLON|ROUMASPORT|PADFORCE|WORLD CLASS|SEVEN FITNESS|FITNESS|\bGYM\b|\bSALA\b|SALA SPORT|SALA FITNESS|STADION/, "optional", "Sports & hobbies"],
-  [/DERTOUR|BOOKING|AIRBNB|HOTEL|HOSTEL|EXPEDIA|ESKY|VOLA|CHRISTIAN TOUR/, "optional", "Travel"],
-  [/LOTO\.?RO|LOTERIA|BETANO|SUPERBET|GAMING|CASINO/, "optional", "Lottery & gaming"],
+  [/DERTOUR|BOOKING|AIRBNB|HOTEL|HOSTEL|EXPEDIA|ESKY|VOLA|CHRISTIAN TOUR|LUFTHANSA|EUROSTAR|RYANAIR|WIZZ|BLUE ?AIR|TAROM|EASYJET|VUELING|AIR ?FRANCE|\bKLM\b|EMIRATES|QATAR|TURKISH AIR|AIRLINES?\b|\bAIRPORT\b|FLIXBUS/, "optional", "Travel"],
+  [/STEAM|EPIC ?GAMES|INSTANT-?GAMING|PLAYSTATION|XBOX|NINTENDO|G2A|HUMBLE ?BUNDLE|GOG\.COM|NVIDIA|GEFORCE/, "optional", "Games & apps"],
+  [/BINANCE|COINBASE|KRAKEN|CRYPTO\.COM|BITPANDA/, "optional", "Crypto & investing"],
+  [/LOTO\.?RO|LOTERIA|BETANO|SUPERBET|CASINO|GAMBL/, "optional", "Lottery & gaming"],
   [/CARGUS|FAN COURIER|SAMEDAY|DPD|GLS|POSTA ROMANA/, "optional", "Couriers"],
   [/SANPET|PET ?SHOP|ANIMAL|VETERINAR|ZOOLAND|ANIMAX/, "optional", "Pets"],
   [/NETFLIX|SPOTIFY|HBO|DISNEY|YOUTUBE ?PREMIUM|GOOGLE ?(STORAGE|ONE|\*)|APPLE\.?COM|ICLOUD|MICROSOFT|OPENAI|CHATGPT|ANTHROPIC|CLAUDE|AMAZON PRIME|PATREON|AUDIBLE|STORYTEL|LINKEDIN/, "optional", "Subscriptions & digital"],
 ];
+
+/** Run a merchant name (already uppercased) through the ruleset. */
+export function matchMerchantRules(upperName: string): { group: Group; category: string } | null {
+  for (const [rx, group, category] of MERCHANT_RULES) {
+    if (rx.test(upperName)) return { group, category };
+  }
+  return null;
+}
 
 /** Category -> emoji, purely for display. Missing categories fall back to a dot. */
 export const CATEGORY_ICON: Record<string, string> = {
@@ -140,8 +150,11 @@ export const CATEGORY_ICON: Record<string, string> = {
   "Shopping & retail": "🛍️", "Car & transport": "🚗", "Sports & hobbies": "🏋️",
   Travel: "✈️", "Lottery & gaming": "🎰", Couriers: "📦", Pets: "🐾",
   "Subscriptions & digital": "💻", Cash: "💵", Other: "❓",
+  "Games & apps": "🎮", "Crypto & investing": "🪙",
   "Salary": "💼", "From partner": "💞", "Deposit interest": "📈",
   "Deposits (own)": "🏦", "Own account transfer": "🔁", "Revolut top-ups (own)": "💳",
+  "Revolut top-up (own)": "💳", "Savings interest": "📈", "Currency exchange": "💱",
+  "Fees & charges": "🧾", "Refund": "↩️",
   "Transfers to people": "👥", "Credit card payment": "💳",
   "Other income": "➕", "Insurance payouts": "🛡️", "From family": "👨‍👩‍👧",
 };
@@ -227,6 +240,50 @@ export function categorize(tx: CategorizeInput, self: RegExp = NEVER_RE): CatRes
     return { group: "transfers", category: "Transfers to people", who: beneficiar, direction: "out", rule: "beneficiary:transfer" };
   }
   return { group: "optional", category: "Other", who: t, direction: "out", rule: "fallback:other" };
+}
+
+/** Revolut descriptions carry a "*Location" suffix — "binance.com*Vilnius" -> "binance.com". */
+export function cleanRevolutMerchant(desc: string): string {
+  return desc.split("*")[0].trim() || desc.trim();
+}
+
+/**
+ * Classify a Revolut statement row. Direction is decided by the row Type (and the
+ * sign, via credit/debit for refunds), so it stays consistent with the amounts.
+ */
+export function categorizeRevolut(type: string, description: string, credit: number, debit: number): CatResult {
+  const T = (type || "").toLowerCase();
+  const desc = description || "";
+  const merchant = cleanRevolutMerchant(desc);
+  const up = merchant.toUpperCase();
+
+  if (/interest/.test(T)) return { group: "income", category: "Savings interest", who: "Revolut", direction: "in", rule: "revolut:interest" };
+  if (/charge|fee/.test(T)) return { group: "optional", category: "Fees & charges", who: "Revolut", direction: "out", rule: "revolut:charge" };
+  if (/exchange/.test(T)) return { group: "savings", category: "Currency exchange", who: merchant || "Revolut", direction: "internal", rule: "revolut:exchange" };
+
+  if (/transfer/.test(T)) {
+    // "To/From <CURRENCY> <vault>" is an own vault/pocket move → internal.
+    const isVault = /^(to|from)\s+(ron|eur|usd|gbp|chf|pln|huf|bgn|try|sek|nok|dkk|czk|usdt|btc|eth)\b/i.test(desc);
+    if (isVault) return { group: "savings", category: "Own account transfer", who: merchant || "Revolut", direction: "internal", rule: "revolut:vault" };
+    // otherwise it is a real person/company transfer — money IN is income, money OUT is a transfer
+    if (credit > 0) return { group: "income", category: "Other income", who: merchant, direction: "in", rule: "revolut:transfer-in" };
+    return { group: "transfers", category: "Transfers to people", who: merchant, direction: "out", rule: "revolut:transfer-out" };
+  }
+
+  if (/deposit|top.?up/.test(T)) {
+    // Only an explicit "Payment from <external payer>" is income; every other deposit
+    // (Top-up, Open banking deposit, Added money…) is the user funding their own account.
+    if (/^payment from/i.test(desc)) {
+      const payer = desc.replace(/^payment from\s*/i, "").trim() || merchant;
+      return { group: "income", category: "Other income", who: payer, direction: "in", rule: "revolut:deposit-in" };
+    }
+    return { group: "savings", category: "Revolut top-up (own)", who: merchant || "Revolut", direction: "internal", rule: "revolut:topup" };
+  }
+  // spending (Card Payment / Rev Payment / anything else). A positive value here is a refund.
+  if (credit > 0 && debit === 0) return { group: "income", category: "Refund", who: merchant, direction: "in", rule: "revolut:refund" };
+  const m = matchMerchantRules(up);
+  if (m) return { group: m.group, category: m.category, who: merchant, direction: m.group === "savings" ? "internal" : "out", rule: `revolut:${m.category}` };
+  return { group: "optional", category: "Other", who: merchant, direction: "out", rule: "revolut:unmatched" };
 }
 
 /** Base per-transaction tags (before the cross-transaction enrichment pass). */

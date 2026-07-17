@@ -1,6 +1,22 @@
 // Filter state + application. Filters scope every view in the app.
 
 import type { Direction, Group, Txn } from "../types";
+import { GROUP_LABELS } from "../types";
+
+/** Dimension the include/exclude table groups transactions by. */
+export type GroupDim = "category" | "merchant" | "group";
+
+/** Stable key for a transaction under a grouping dimension (used by the exclude set). */
+export function groupKeyOf(t: Txn, dim: GroupDim): string {
+  if (dim === "category") return t.category;
+  if (dim === "merchant") return t.who || t.type || "—";
+  return t.group;
+}
+
+/** Human label for a group key under a dimension. */
+export function groupLabelOf(key: string, dim: GroupDim): string {
+  return dim === "group" ? GROUP_LABELS[key as Group] ?? key : key;
+}
 
 export interface Filters {
   start: string; // ISO date, inclusive

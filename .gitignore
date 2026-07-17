@@ -11,5 +11,6 @@ public/sample-statement.csv
 Tranzactii_*.csv
 
 # Legacy first-attempt artifacts (kept for reference, not part of the app)
+analyze.py
 transactions_categorized.csv
 report.html

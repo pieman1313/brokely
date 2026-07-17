@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Group, ParseResult, Txn } from "./types";
 import { GROUP_LABELS, GROUP_ORDER } from "./types";
 import { parseStatement } from "./lib/parse";
-import { boundsOf, defaultFilters, applyFilters, isFiltered, type Filters } from "./lib/filters";
+import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "./lib/analytics";
 import { iconFor } from "./lib/tagging";
@@ -14,6 +14,7 @@ import MonthlyTrend from "./components/MonthlyTrend";
 import BarList, { type BarItem } from "./components/BarList";
 import RecurringPanel from "./components/RecurringPanel";
 import TransactionTable from "./components/TransactionTable";
+import GroupedTable from "./components/GroupedTable";
 import FileLoader from "./components/FileLoader";
 
 const BEHAVIOURAL_TAGS = ["#recurring", "#large", "#weekend", "#cash"];
@@ -32,6 +33,9 @@ export default function App() {
   const [minFlowPct, setMinFlowPct] = useState(0);
   const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
   const [error, setError] = useState<string | null>(null);
+  // include/exclude table state
+  const [groupBy, setGroupBy] = useState<GroupDim>("category");
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   // apply theme to the document
   useEffect(() => {
@@ -53,6 +57,7 @@ export default function App() {
       setParsed(result);
       setFileName(name);
       setFilters(defaultFilters(boundsOf(result.txns)));
+      setExcluded(new Set()); // fresh data → nothing excluded
       setError(result.txns.length === 0 ? "No transactions were recognised in this file." : null);
     } catch (e) {
       setError(`Could not parse ${name}: ${(e as Error).message}`);
@@ -63,17 +68,23 @@ export default function App() {
   const currency = parsed?.currency ?? "";
   const bounds = useMemo(() => boundsOf(txns), [txns]);
 
+  // filters produce `filtered`; the include/exclude table further removes whole
+  // groups, producing `active` — which feeds every chart, tile and total.
   const filtered = useMemo(
     () => (filters ? applyFilters(txns, filters) : txns),
     [txns, filters]
   );
+  const active = useMemo(
+    () => (excluded.size ? filtered.filter((t) => !excluded.has(groupKeyOf(t, groupBy))) : filtered),
+    [filtered, excluded, groupBy]
+  );
 
-  const model = useMemo(() => buildSankey(filtered, minFlowPct), [filtered, minFlowPct]);
-  const stats = useMemo(() => computeStats(filtered), [filtered]);
-  const monthly = useMemo(() => monthlySeries(filtered), [filtered]);
-  const cats = useMemo(() => topCategories(filtered), [filtered]);
-  const merchants = useMemo(() => topMerchants(filtered), [filtered]);
-  const recur = useMemo(() => recurring(filtered), [filtered]);
+  const model = useMemo(() => buildSankey(active, minFlowPct), [active, minFlowPct]);
+  const stats = useMemo(() => computeStats(active), [active]);
+  const monthly = useMemo(() => monthlySeries(active), [active]);
+  const cats = useMemo(() => topCategories(active), [active]);
+  const merchants = useMemo(() => topMerchants(active), [active]);
+  const recur = useMemo(() => recurring(active), [active]);
 
   // stable option lists from the whole dataset
   const groupOptions = useMemo(
@@ -118,7 +129,29 @@ export default function App() {
   }
 
   const patch = (p: Partial<Filters>) => setFilters((f) => ({ ...(f as Filters), ...p }));
-  const reset = () => setFilters(defaultFilters(bounds));
+  const reset = () => {
+    setFilters(defaultFilters(bounds));
+    setExcluded(new Set());
+  };
+
+  // include/exclude table handlers
+  const toggleGroup = (key: string) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  const setManyGroups = (keys: string[], included: boolean) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) (included ? next.delete(k) : next.add(k));
+      return next;
+    });
+  const changeGroupBy = (d: GroupDim) => {
+    if (d === groupBy) return; // no-op click must not wipe selections
+    setGroupBy(d);
+    setExcluded(new Set()); // keys are dimension-specific; start fresh
+  };
 
   const catItems: BarItem[] = cats.map((c) => ({
     key: `${c.group}:${c.category}`,
@@ -137,7 +170,7 @@ export default function App() {
 
   const exportCsv = () => {
     const head = ["date", "who", "group", "category", "direction", "tags", "debit", "credit", "amount"];
-    const rows = filtered.map((t: Txn) =>
+    const rows = active.map((t: Txn) =>
       [t.date, csv(t.who), t.group, csv(t.category), t.direction, csv(t.tags.join(" ")), t.debit.toFixed(2), t.credit.toFixed(2), t.amount.toFixed(2)].join(",")
     );
     const blob = new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" });
@@ -187,6 +220,24 @@ export default function App() {
 
       <StatTiles stats={stats} currency={currency} />
 
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>Groups — include or exclude</h2>
+            <p className="card-sub">Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.</p>
+          </div>
+        </div>
+        <GroupedTable
+          txns={filtered}
+          currency={currency}
+          dim={groupBy}
+          onDimChange={changeGroupBy}
+          excluded={excluded}
+          onToggle={toggleGroup}
+          onSetMany={setManyGroups}
+        />
+      </section>
+
       <section className="card sankey-card">
         <div className="card-head">
           <div>
@@ -231,9 +282,9 @@ export default function App() {
       <section className="card">
         <div className="card-head">
           <h2>Transactions</h2>
-          <span className="card-sub">{filtered.length.toLocaleString("en-US")} shown · click a row for details</span>
+          <span className="card-sub">{active.length.toLocaleString("en-US")} counted{excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details</span>
         </div>
-        <TransactionTable txns={filtered} currency={currency} />
+        <TransactionTable txns={active} currency={currency} />
       </section>
 
       <footer className="foot">

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { parseStatement } from "../src/lib/parse";
 import { buildSankey } from "../src/lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "../src/lib/analytics";
-import { applyFilters, defaultFilters, boundsOf } from "../src/lib/filters";
+import { applyFilters, defaultFilters, boundsOf, groupKeyOf } from "../src/lib/filters";
 
 const path = process.argv[2] ?? "public/sample-statement.csv";
 const text = readFileSync(path, "utf8");
@@ -79,6 +79,21 @@ const dm = buildSankey(df, 0);
 console.log("sankey nodes:", dm.nodes.length, "| surplus/deficit node:", dm.nodes.filter((n) => n.kind === "surplus" || n.kind === "deficit").map((n) => `${n.label}=${n.value.toFixed(0)}`));
 console.log("top merchants:", topMerchants(df, 5).map((m) => `${m.who}(${m.total.toFixed(0)})`));
 console.log("top categories:", topCategories(df, 6).map((c) => `${c.category}(${c.total.toFixed(0)})`));
+
+console.log("\n== GROUP EXCLUSION (simulate unticking a category) ==");
+{
+  const base = ds; // default-view stats
+  const topCat = topCategories(df, 1)[0];
+  if (topCat) {
+    const kept = df.filter((x) => groupKeyOf(x, "category") !== topCat.category);
+    const after = computeStats(kept);
+    const dropOut = base.totalOut - after.totalOut;
+    console.log(`exclude "${topCat.category}" (total ${topCat.total.toFixed(0)}):`);
+    console.log(`  out ${base.totalOut.toFixed(0)} -> ${after.totalOut.toFixed(0)} (dropped ${dropOut.toFixed(0)})`);
+    console.log(`  recompute correct: ${Math.abs(dropOut - topCat.total) < 0.5}`);
+    console.log(`  txns ${df.length} -> ${kept.length}`);
+  }
+}
 
 console.log("\n== 'Other' merchants (unmatched, top 12 by spend) ==");
 const otherTot: Record<string, number> = {};

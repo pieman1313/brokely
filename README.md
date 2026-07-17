@@ -33,6 +33,11 @@ npm run preview  # serve the production build
   (required / optional / to-people / savings / income) and a category
   (groceries, eating out, utilities, …) by a merchant ruleset, and given
   behavioural tags: `#recurring`, `#large`, `#weekend`, `#cash`, `#internal`.
+- **Groups — include / exclude** — a searchable table that groups every
+  transaction by category, merchant, or top-level group. Each group has a
+  checkbox (ticked by default); unticking one drops it from **every** chart, tile
+  and total. A header checkbox toggles all (with an indeterminate state), and each
+  row expands to show its transactions.
 - **Supporting views** — stat tiles, monthly in/out/net trend, top categories,
   top merchants, a recurring-commitments (subscriptions & bills) panel, and a
   sortable, expandable transaction table.
@@ -49,6 +54,9 @@ branch.
 
 - **Banca Transilvania / ING Romania** `Tranzactii_*.csv` block export (primary,
   fully tagged).
+- **Revolut** account-statement CSV export (`Type, …, Amount, Fee, State, …`) —
+  non-completed rows are skipped, fees counted, and types (Card Payment, Interest,
+  Transfer, Deposit, Exchange, Charge) mapped to spend / income / internal.
 - **Generic flat CSVs** — the parser falls back to heuristic column detection
   (date / description / amount, or debit+credit). Tagging still runs on the
   description, so categorisation is rougher.

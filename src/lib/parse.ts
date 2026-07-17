@@ -9,7 +9,7 @@
 
 import Papa from "papaparse";
 import type { ParseResult, Txn } from "../types";
-import { baseTags, buildSelfMatcher, categorize, cleanMerchant, enrichTags } from "./tagging";
+import { baseTags, buildSelfMatcher, categorize, categorizeRevolut, cleanMerchant, enrichTags } from "./tagging";
 
 const RO_MONTHS: Record<string, number> = {
   ianuarie: 1, februarie: 2, martie: 3, aprilie: 4, mai: 5, iunie: 6,
@@ -45,6 +45,16 @@ function parseAmountSmart(raw: string): number {
 function toRows(text: string): string[][] {
   const res = Papa.parse<string[]>(text, { skipEmptyLines: "greedy" });
   return (res.data as string[][]).filter((r) => Array.isArray(r));
+}
+
+function looksLikeRevolut(rows: string[][]): boolean {
+  const h = (rows[0] ?? []).map((c) => (c ?? "").trim().toLowerCase());
+  return (
+    h.includes("type") &&
+    h.includes("amount") &&
+    h.includes("state") &&
+    (h.includes("completed date") || h.includes("started date"))
+  );
 }
 
 function looksLikeBT(rows: string[][]): boolean {
@@ -147,6 +157,78 @@ function parseBT(rows: string[][]): ParseResult {
   enrichTags(txns);
   if (txns.length === 0) warnings.push("No transactions were recognised in this file.");
   return { txns, currency: "RON", accountHolder, format: "bt-ing-block", warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Revolut account-statement parser
+// ---------------------------------------------------------------------------
+function parseRevolut(text: string): ParseResult {
+  const res = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: "greedy",
+    transformHeader: (h) => h.trim(),
+  });
+  const data = (res.data as Record<string, string>[]).filter((r) => r && Object.keys(r).length);
+  const warnings: string[] = [];
+
+  const curCount = new Map<string, number>();
+  let skippedState = 0;
+  const txns: Txn[] = [];
+
+  data.forEach((row, i) => {
+    const state = (row["State"] ?? "").trim().toUpperCase();
+    if (state && state !== "COMPLETED") { skippedState++; return; } // ignore reverted/pending
+    // `||` (not `??`) so a present-but-blank Completed Date falls back to Started Date
+    const dateISO = parseDateGuess((row["Completed Date"] || row["Started Date"] || "").trim());
+    if (!dateISO) return;
+
+    // Net the fee into the movement so each row is a single value and fees always
+    // reduce the balance — a fee-only "Charge" (amount 0, fee>0) becomes an outflow,
+    // and a fee on an inflow row is not silently dropped.
+    const gross = parseAmountSmart(row["Amount"] ?? "0"); // signed: +in / -out
+    const fee = Math.abs(parseAmountSmart(row["Fee"] ?? "0"));
+    const net = gross - fee;
+    const debit = net < 0 ? -net : 0;
+    const credit = net > 0 ? net : 0;
+    if (debit === 0 && credit === 0) return; // net-zero rows
+
+    const cur = (row["Currency"] ?? "").trim();
+    if (cur) curCount.set(cur, (curCount.get(cur) ?? 0) + 1);
+
+    const cat = categorizeRevolut(row["Type"] ?? "", row["Description"] ?? "", credit, debit);
+    txns.push({
+      id: `rev-${i}`,
+      date: dateISO,
+      month: dateISO.slice(0, 7),
+      type: row["Type"] ?? "",
+      debit,
+      credit,
+      amount: credit > 0 ? credit : debit,
+      who: cat.who,
+      group: cat.group,
+      category: cat.category,
+      direction: cat.direction,
+      tags: baseTags(cat, dateISO),
+      rule: cat.rule,
+      details: {
+        Type: row["Type"] ?? "",
+        Description: row["Description"] ?? "",
+        Fee: row["Fee"] ?? "",
+        Currency: cur,
+        State: row["State"] ?? "",
+      },
+    });
+  });
+
+  enrichTags(txns);
+  // dominant currency
+  let currency = "";
+  let best = 0;
+  for (const [c, n] of curCount) if (n > best) { best = n; currency = c; }
+  if (curCount.size > 1) warnings.push(`This export mixes ${curCount.size} currencies; amounts are shown as-is without conversion.`);
+  if (skippedState > 0) warnings.push(`Skipped ${skippedState} non-completed (reverted/pending) transactions.`);
+  if (txns.length === 0) warnings.push("No completed transactions were recognised in this file.");
+  return { txns, currency, format: "revolut", warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +360,7 @@ function parseGeneric(text: string): ParseResult {
 /** Entry point: sniff the format and parse. */
 export function parseStatement(text: string): ParseResult {
   const rows = toRows(text);
+  if (looksLikeRevolut(rows)) return parseRevolut(text);
   if (looksLikeBT(rows)) return parseBT(rows);
   return parseGeneric(text);
 }

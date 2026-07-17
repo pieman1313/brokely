@@ -55,7 +55,7 @@ export interface ParseResult {
   /** Account holder if the statement exposes one. */
   accountHolder?: string;
   /** Format the parser recognised. */
-  format: "bt-ing-block" | "generic-flat";
+  format: "bt-ing-block" | "revolut" | "generic-flat";
   /** Non-fatal notes to surface to the user (e.g. rows skipped). */
   warnings: string[];
 }
