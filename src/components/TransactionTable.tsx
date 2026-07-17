@@ -72,6 +72,9 @@ function VRow({ t, currency, groupLabel, open, onToggle }: { t: Txn; currency: s
           <span className="cat-icon">{iconFor(t.category)}</span>
           {t.category}
           <span className="grp-chip">{groupLabel}</span>
+          {t.state && t.state.toUpperCase() !== "COMPLETED" && (
+            <span className={`state-chip ${t.state.toUpperCase() === "REVERTED" ? "reverted" : "pending"}`}>{t.state.toLowerCase()}</span>
+          )}
         </span>
         <span className="vt-cell tags-cell">
           {t.tags.filter((x) => x === "#recurring" || x === "#large" || x === "#weekend" || x === "#cash").map((x) => (

@@ -3,6 +3,7 @@ import { parseStatement } from "../src/lib/parse";
 import { applyOverrides } from "../src/lib/overrides";
 import { computeStats } from "../src/lib/analytics";
 import { buildSankey } from "../src/lib/sankey-model";
+import { isCounted, reconcileKey } from "../src/lib/reconcile";
 import { BUILTIN_GROUPS } from "../src/types";
 
 let fail = 0;
@@ -136,6 +137,26 @@ Salary Corp,2026-06-06,3000.00`;
     eff.every((t) => t.group === "grp-invest" && t.kind === "spend" && t.direction === "out") &&
       !!groupNode && groupNode.colorKey === "custom-1" && Math.round(model.totalOut) === 750,
     `group=${eff[0]?.group} kind=${eff[0]?.kind} node=${groupNode?.label}/${groupNode?.colorKey}`
+  );
+}
+
+// 11) reconciliation: pending/reverted parsed but excluded until adopted
+{
+  const csv = [
+    "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance",
+    "Card Payment,Current,2026-01-05 10:00:00,2026-01-05 10:00:00,Shop A,-100,0,RON,COMPLETED,0",
+    "Card Payment,Current,2026-01-06 10:00:00,2026-01-06 10:00:00,Shop B,-50,0,RON,PENDING,0",
+    "Card Payment,Current,2026-01-07 10:00:00,2026-01-07 10:00:00,Shop C,-30,0,RON,REVERTED,0",
+  ].join("\n");
+  const all = parseStatement(csv).txns;
+  const pendingRow = all.find((t) => t.state === "PENDING")!;
+  const countedDefault = all.filter((t) => isCounted(t, {}));
+  const countedAdopted = all.filter((t) => isCounted(t, { [reconcileKey(pendingRow)]: "adopt" }));
+  check(
+    "reconcile: 3 parsed, only COMPLETED counts by default, adopting PENDING includes it",
+    all.length === 3 && countedDefault.length === 1 && computeStats(countedDefault).totalOut === 100 &&
+      countedAdopted.length === 2 && computeStats(countedAdopted).totalOut === 150,
+    `parsed=${all.length} default=${countedDefault.length} adopted=${countedAdopted.length}`
   );
 }
 

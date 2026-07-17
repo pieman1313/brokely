@@ -401,6 +401,22 @@ span.group-kind { display: inline-flex; align-items: center; }
 .color-swatch { width: 20px; height: 20px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
 .color-swatch.on { border-color: var(--text-primary); }
 
+/* ---------------- reconcile ---------------- */
+.reconcile-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.reconcile-banner .btn-ghost { flex: none; }
+.reconcile-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.reconcile-summary { color: var(--text-secondary); font-size: 12.5px; }
+.reconcile-bulk { display: flex; gap: 8px; flex-wrap: wrap; }
+.reconcile-bulk .btn-ghost { padding: 5px 11px; font-size: 12.5px; }
+.reconcile-table td { vertical-align: middle; }
+.reconcile-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.adopted-row td { background: color-mix(in srgb, var(--pos) 8%, transparent); }
+.btn-more.inline { width: auto; margin: 0; padding: 4px 10px; }
+.btn-more.inline.include { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 45%, transparent); }
+.state-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; margin-left: 8px; white-space: nowrap; }
+.state-chip.pending { color: var(--c-yellow); background: color-mix(in srgb, var(--c-yellow) 16%, transparent); }
+.state-chip.reverted { color: var(--neg); background: color-mix(in srgb, var(--neg) 14%, transparent); }
+
 /* ---------------- footer ---------------- */
 .foot { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .foot-total { margin-left: auto; font-variant-numeric: tabular-nums; }

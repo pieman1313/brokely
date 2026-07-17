@@ -174,12 +174,10 @@ function parseRevolut(text: string): ParseResult {
   const warnings: string[] = [];
 
   const curCount = new Map<string, number>();
-  let skippedState = 0;
   const txns: Txn[] = [];
 
   data.forEach((row, i) => {
-    const state = (row["State"] ?? "").trim().toUpperCase();
-    if (state && state !== "COMPLETED") { skippedState++; return; } // ignore reverted/pending
+    const state = (row["State"] ?? "").trim().toUpperCase() || "COMPLETED";
     // `||` (not `??`) so a present-but-blank Completed Date falls back to Started Date
     const dateISO = parseDateGuess((row["Completed Date"] || row["Started Date"] || "").trim());
     if (!dateISO) return;
@@ -212,6 +210,7 @@ function parseRevolut(text: string): ParseResult {
       kind: BUILTIN_KIND[cat.group] ?? "spend",
       category: cat.category,
       direction: cat.direction,
+      state,
       tags: baseTags(cat, dateISO),
       rule: cat.rule,
       details: {
@@ -230,8 +229,7 @@ function parseRevolut(text: string): ParseResult {
   let best = 0;
   for (const [c, n] of curCount) if (n > best) { best = n; currency = c; }
   if (curCount.size > 1) warnings.push(`This export mixes ${curCount.size} currencies; amounts are shown as-is without conversion.`);
-  if (skippedState > 0) warnings.push(`Skipped ${skippedState} non-completed (reverted/pending) transactions.`);
-  if (txns.length === 0) warnings.push("No completed transactions were recognised in this file.");
+  if (txns.length === 0) warnings.push("No transactions were recognised in this file.");
   return { txns, currency, format: "revolut", warnings };
 }
 

@@ -6,6 +6,7 @@ import { buildSankey } from "./lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "./lib/analytics";
 import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, categoriesWithGroup, type Overrides } from "./lib/overrides";
 import { loadGroups, saveGroups, groupMap, nextColorVar, slugId } from "./lib/groups";
+import { isCounted, isNonCompleted, reconcileKey, loadReconcile, saveReconcile, type Reconcile, type Decision } from "./lib/reconcile";
 import { useLocalStorageState } from "./lib/ui-state";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
@@ -19,6 +20,7 @@ import BarList, { type BarItem } from "./components/BarList";
 import RecurringPanel from "./components/RecurringPanel";
 import TransactionTable from "./components/TransactionTable";
 import GroupedTable from "./components/GroupedTable";
+import ReconcilePanel from "./components/ReconcilePanel";
 import Card from "./components/Card";
 import FileLoader from "./components/FileLoader";
 
@@ -56,9 +58,11 @@ export default function App() {
   const [tab, setTab] = useLocalStorageState<"dashboard" | "configure">("spend.tab", "dashboard");
   const [order, setOrder] = useLocalStorageState<string[]>("spend.order", SECTION_IDS);
   const [hidden, setHidden] = useLocalStorageState<string[]>("spend.hidden", []);
+  const [reconcile, setReconcile] = useState<Reconcile>(() => loadReconcile());
 
   useEffect(() => saveOverrides(overrides), [overrides]);
   useEffect(() => saveGroups(groups), [groups]);
+  useEffect(() => saveReconcile(reconcile), [reconcile]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
   useEffect(() => {
@@ -82,11 +86,16 @@ export default function App() {
     }
   };
 
-  // raw parsed txns → apply manual overrides (resolved against the group config)
+  // raw parsed txns → apply manual overrides → keep only counted (completed + adopted)
   const rawTxns = parsed?.txns ?? [];
-  const txns = useMemo(() => applyOverrides(rawTxns, overrides, groups), [rawTxns, overrides, groups]);
+  const tagged = useMemo(() => applyOverrides(rawTxns, overrides, groups), [rawTxns, overrides, groups]);
+  const txns = useMemo(() => tagged.filter((t) => isCounted(t, reconcile)), [tagged, reconcile]);
+  const pending = useMemo(() => tagged.filter(isNonCompleted), [tagged]);
+  const undecidedCount = useMemo(() => pending.filter((t) => !reconcile[reconcileKey(t)]).length, [pending, reconcile]);
   const currency = parsed?.currency ?? "";
-  const bounds = useMemo(() => boundsOf(txns), [txns]);
+  // date bounds span the FULL dataset (incl. pending/reverted) so the range covers a
+  // row you later adopt, and the "All" preset / Reset chrome stays consistent on load
+  const bounds = useMemo(() => boundsOf(tagged), [tagged]);
 
   const gmap = useMemo(() => groupMap(groups), [groups]);
   const groupLabelMap = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g.label])), [groups]);
@@ -158,6 +167,12 @@ export default function App() {
   const removeOverride = (who: string) => setOverrides((o) => { const n = { ...o }; delete n[who]; return n; });
   const clearOverrides = () => setOverrides({});
   const assign = (who: string) => { setTab("configure"); setAssignReq((prev) => ({ who, n: (prev?.n ?? 0) + 1 })); };
+
+  // reconciliation handlers
+  const setDecision = (key: string, d: Decision) => setReconcile((r) => ({ ...r, [key]: d }));
+  const resetDecision = (key: string) => setReconcile((r) => { const n = { ...r }; delete n[key]; return n; });
+  const bulkDecision = (keys: string[], d: Decision | "reset") =>
+    setReconcile((r) => { const n = { ...r }; for (const k of keys) { if (d === "reset") delete n[k]; else n[k] = d; } return n; });
 
   // group CRUD
   const addGroup = (label: string, kind: GroupKind) =>
@@ -285,9 +300,20 @@ export default function App() {
 
       {error && <div className="banner error">{error}</div>}
       {parsed?.warnings.map((w, i) => <div className="banner warn" key={i}>{w}</div>)}
+      {undecidedCount > 0 && tab === "dashboard" && (
+        <div className="banner warn reconcile-banner">
+          <span><b>{undecidedCount}</b> pending/reverted transaction{undecidedCount === 1 ? " is" : "s are"} excluded from the totals until you reconcile them.</span>
+          <button className="btn-ghost" onClick={() => setTab("configure")}>Reconcile →</button>
+        </div>
+      )}
 
       {tab === "configure" ? (
         <>
+          {pending.length > 0 && (
+            <Card id="reconcile" title={`Reconcile pending / reverted${undecidedCount ? ` · ${undecidedCount} to decide` : ""}`} subtitle="These transactions haven’t settled or were reverted, so they’re excluded from every total. Include the ones that should count; remove the rest.">
+              <ReconcilePanel items={pending} reconcile={reconcile} currency={currency} groupLabels={groupLabelMap} onSet={setDecision} onReset={resetDecision} onBulk={bulkDecision} />
+            </Card>
+          )}
           <Card id="groups-config" title="Top-level groups" subtitle="Create, rename, recolour or delete the buckets your money flows into. A group’s behaviour sets its side of the flow (income / spending / savings).">
             <GroupsPanel
               groups={groups}

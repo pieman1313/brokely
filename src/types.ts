@@ -49,6 +49,9 @@ export interface Txn {
   /** Fine-grained category, e.g. "Groceries". */
   category: string;
   direction: Direction;
+  /** Settlement state, when the source distinguishes it (Revolut: COMPLETED / PENDING /
+   *  REVERTED). Non-completed rows are excluded from computations until reconciled. */
+  state?: string;
   /** Auto-derived hashtags, e.g. ["#groceries", "#recurring", "#weekend"]. */
   tags: string[];
   /** Which rule matched (for transparency / debugging the tagging). */
