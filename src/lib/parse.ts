@@ -43,9 +43,25 @@ function parseAmountSmart(raw: string): number {
   return Number(s) || 0;
 }
 
-function toRows(text: string): string[][] {
+interface RawParse {
+  rows: string[][];
+  delimiter: string;
+  newline: string;
+}
+function toRows(text: string): RawParse {
   const res = Papa.parse<string[]>(text, { skipEmptyLines: "greedy" });
-  return (res.data as string[][]).filter((r) => Array.isArray(r));
+  const rows = (res.data as string[][]).filter((r) => Array.isArray(r));
+  return { rows, delimiter: res.meta.delimiter || ",", newline: res.meta.linebreak || "\n" };
+}
+
+/**
+ * The header row exactly as written in the source. We parse it in ARRAY mode (no
+ * `header:true`), so papaparse never renames blank/duplicate columns or trims
+ * whitespace — letting the export reproduce the original header byte-for-byte.
+ */
+function rawHeaderRow(text: string): string[] {
+  const res = Papa.parse<string[]>(text, { preview: 1, skipEmptyLines: "greedy" });
+  return (res.data as string[][])[0] ?? [];
 }
 
 function looksLikeRevolut(rows: string[][]): boolean {
@@ -71,7 +87,7 @@ function looksLikeBT(rows: string[][]): boolean {
 // ---------------------------------------------------------------------------
 // Banca Transilvania / ING block parser
 // ---------------------------------------------------------------------------
-function parseBT(rows: string[][]): ParseResult {
+function parseBT(rows: string[][], delimiter = ",", newline = "\n"): ParseResult {
   const warnings: string[] = [];
   let accountHolder: string | undefined;
 
@@ -81,9 +97,12 @@ function parseBT(rows: string[][]): ParseResult {
     debit: number;
     credit: number;
     details: Record<string, string>;
+    /** verbatim source rows (date row + detail rows) for a faithful re-emit. */
+    raw: string[][];
   }
 
   const blocks: Cur[] = [];
+  const preamble: string[][] = []; // everything before the first transaction block
   let cur: Cur | null = null;
   let lastKey = ""; // most-recent detail key, so wrapped values can be appended
 
@@ -91,9 +110,13 @@ function parseBT(rows: string[][]): ParseResult {
     const c0 = (row[0] ?? "").trim();
     if (/^Titular cont:/i.test(c0)) {
       accountHolder = c0.replace(/^Titular cont:\s*/i, "").trim();
+      if (!cur) preamble.push(row);
       continue;
     }
-    if (c0 === "Data" || /^Sold/i.test(c0)) continue; // header / balance rows
+    if (c0 === "Data" || /^Sold/i.test(c0)) {
+      if (!cur) preamble.push(row); // header / opening-balance rows belong to the preamble
+      continue; // interspersed balance rows after the first block are dropped on re-emit
+    }
 
     const m = c0.match(RO_DATE_RE);
     const monthNum = m ? RO_MONTHS[m[2].toLowerCase()] : undefined;
@@ -109,9 +132,11 @@ function parseBT(rows: string[][]): ParseResult {
         debit: parseAmountEuro(row[5] ?? ""),
         credit: parseAmountEuro(row[6] ?? ""),
         details: {},
+        raw: [row],
       };
     } else if (cur && c0 === "") {
       // continuation detail line, e.g. "Tranzactie la:DIGI ROMANIA SA  RO  BUCURESTI"
+      cur.raw.push(row);
       const detail = (row[3] ?? "").trim();
       if (!detail) continue;
       const idx = detail.indexOf(":");
@@ -124,6 +149,8 @@ function parseBT(rows: string[][]): ParseResult {
         // wrapped value (no colon): append to the previous key rather than dropping it
         cur.details[lastKey] = `${cur.details[lastKey]} ${detail}`.trim();
       }
+    } else if (!cur) {
+      preamble.push(row); // any other leading row before the first block
     }
   }
   if (cur) blocks.push(cur);
@@ -131,10 +158,13 @@ function parseBT(rows: string[][]): ParseResult {
   // derive the "own name" matcher from the statement's account holder, so
   // transfers to/from the user's own accounts are recognised for any holder
   const self = buildSelfMatcher(accountHolder);
+  const blockById: Record<string, string[][]> = {};
   const txns: Txn[] = blocks.map((b, i) => {
+    const id = `bt-${i}`;
+    blockById[id] = b.raw;
     const cat = categorize(b, self);
     return {
-      id: `bt-${i}`,
+      id,
       date: b.dateISO,
       month: b.dateISO.slice(0, 7),
       type: b.type,
@@ -158,7 +188,14 @@ function parseBT(rows: string[][]): ParseResult {
 
   enrichTags(txns);
   if (txns.length === 0) warnings.push("No transactions were recognised in this file.");
-  return { txns, currency: "RON", accountHolder, format: "bt-ing-block", warnings };
+  return {
+    txns,
+    currency: "RON",
+    accountHolder,
+    format: "bt-ing-block",
+    warnings,
+    original: { format: "bt-ing-block", delimiter, newline, preamble, blockById },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +209,10 @@ function parseRevolut(text: string): ParseResult {
   });
   const data = (res.data as Record<string, string>[]).filter((r) => r && Object.keys(r).length);
   const warnings: string[] = [];
+  const columns = res.meta.fields ?? Object.keys(data[0] ?? {});
+  const delimiter = res.meta.delimiter || ",";
+  const newline = res.meta.linebreak || "\n";
+  const flatById: Record<string, Record<string, string>> = {};
 
   const curCount = new Map<string, number>();
   const txns: Txn[] = [];
@@ -221,6 +262,7 @@ function parseRevolut(text: string): ParseResult {
         State: row["State"] ?? "",
       },
     });
+    flatById[`rev-${i}`] = row; // keep the original row for a faithful re-emit
   });
 
   enrichTags(txns);
@@ -230,7 +272,13 @@ function parseRevolut(text: string): ParseResult {
   for (const [c, n] of curCount) if (n > best) { best = n; currency = c; }
   if (curCount.size > 1) warnings.push(`This export mixes ${curCount.size} currencies; amounts are shown as-is without conversion.`);
   if (txns.length === 0) warnings.push("No transactions were recognised in this file.");
-  return { txns, currency, format: "revolut", warnings };
+  return {
+    txns,
+    currency,
+    format: "revolut",
+    warnings,
+    original: { format: "revolut", delimiter, newline, columns, headerRow: rawHeaderRow(text), flatById },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +316,11 @@ function parseGeneric(text: string): ParseResult {
   const data = (res.data as Record<string, string>[]).filter((r) => r && Object.keys(r).length);
   const warnings: string[] = [];
   if (data.length === 0) return { txns: [], currency: "", format: "generic-flat", warnings: ["Could not read any rows from this file."] };
+
+  const columns = res.meta.fields ?? Object.keys(data[0]);
+  const delimiter = res.meta.delimiter || ",";
+  const newline = res.meta.linebreak || "\n";
+  const flatById: Record<string, Record<string, string>> = {};
 
   const headers = Object.keys(data[0]);
   // once a header is claimed for a role it can't be reused for another
@@ -347,6 +400,7 @@ function parseGeneric(text: string): ParseResult {
       rule: cat.rule,
       details: { Description: row[descCol] ?? "" },
     });
+    flatById[`gen-${i}`] = row; // keep the original row for a faithful re-emit
   });
 
   enrichTags(txns);
@@ -357,13 +411,19 @@ function parseGeneric(text: string): ParseResult {
       warnings.push(`No spending was detected — every amount came out positive with no debit/credit split or usable sign column, so it's all treated as incoming. If this file mixes income and spending, split it into debit/credit columns or use signed amounts.`);
     }
   }
-  return { txns, currency: "", format: "generic-flat", warnings };
+  return {
+    txns,
+    currency: "",
+    format: "generic-flat",
+    warnings,
+    original: { format: "generic-flat", delimiter, newline, columns, headerRow: rawHeaderRow(text), flatById },
+  };
 }
 
 /** Entry point: sniff the format and parse. */
 export function parseStatement(text: string): ParseResult {
-  const rows = toRows(text);
+  const { rows, delimiter, newline } = toRows(text);
   if (looksLikeRevolut(rows)) return parseRevolut(text);
-  if (looksLikeBT(rows)) return parseBT(rows);
+  if (looksLikeBT(rows)) return parseBT(rows, delimiter, newline);
   return parseGeneric(text);
 }

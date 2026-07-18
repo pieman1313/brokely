@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Group, GroupDef, GroupKind, ParseResult, Txn } from "./types";
+import type { Group, GroupDef, GroupKind, ParseResult } from "./types";
 import { parseStatement } from "./lib/parse";
 import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
@@ -11,6 +11,8 @@ import { loadViews, saveViews, newViewId, matchesView, type SavedView } from "./
 import { useLocalStorageState } from "./lib/ui-state";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
+import { toOriginalCsv, toTaggedCsv } from "./lib/export-csv";
+import { saveTextFile } from "./lib/save-file";
 import FilterBar from "./components/FilterBar";
 import RulesPanel from "./components/RulesPanel";
 import GroupsPanel from "./components/GroupsPanel";
@@ -224,16 +226,17 @@ export default function App() {
   }));
   const merchItems: BarItem[] = merchants.map((m) => ({ key: m.who, label: m.who, sub: m.category, value: m.total }));
 
-  const exportCsv = () => {
-    const head = ["date", "who", "group", "category", "direction", "tags", "debit", "credit", "amount"];
-    const rows = active.map((t: Txn) =>
-      [t.date, csv(t.who), t.group, csv(t.category), t.direction, csv(t.tags.join(" ")), t.debit.toFixed(2), t.credit.toFixed(2), t.amount.toFixed(2)].join(",")
-    );
-    const blob = new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "spending-tagged.csv"; a.click();
-    URL.revokeObjectURL(url);
+  // Export the current filtered view, reproducing the uploaded file's original
+  // shape so re-importing looks identical. Prompts for a name (native dialog when
+  // the browser supports it), defaulting to the source file name.
+  const exportOriginal = () => {
+    const text = parsed?.original ? toOriginalCsv(active, parsed.original) : toTaggedCsv(active);
+    void saveTextFile(fileName || "statement.csv", text);
+  };
+  // The app's tagged/flat view — groups, categories and tags added (for spreadsheets).
+  const exportTagged = () => {
+    const base = (fileName || "statement").replace(/\.csv$/i, "");
+    void saveTextFile(`${base}-tagged.csv`, toTaggedCsv(active));
   };
 
   // dashboard section ordering / visibility
@@ -312,7 +315,8 @@ export default function App() {
           </div>
           <span className="privacy" title="All parsing happens in your browser. Nothing is uploaded.">🔒 100% local</span>
           <FileLoader onLoad={load} compact />
-          <button className="btn-ghost" onClick={exportCsv} title="Downloads exactly the transactions in your current filtered view (all filters + group exclusions applied).">Export CSV · {active.length.toLocaleString("en-US")}</button>
+          <button className="btn-ghost" onClick={exportOriginal} title={`Save the ${active.length.toLocaleString("en-US")} transactions in your current filtered view, in the same format as the file you uploaded — so re-importing looks identical. You'll be asked for a file name.`}>Export CSV · {active.length.toLocaleString("en-US")}</button>
+          <button className="btn-ghost" onClick={exportTagged} title="Save the same filtered rows as a flat table with the app's groups, categories and tags added (for spreadsheets — not re-importable as-is).">Tagged</button>
           <button className="btn-ghost" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? "☀︎ Light" : "☾ Dark"}
           </button>
@@ -411,8 +415,4 @@ export default function App() {
       )}
     </div>
   );
-}
-
-function csv(s: string): string {
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }

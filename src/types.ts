@@ -60,6 +60,33 @@ export interface Txn {
   details: Record<string, string>;
 }
 
+/** Which parser recognised the file. */
+export type StatementFormat = "bt-ing-block" | "revolut" | "generic-flat";
+
+/**
+ * Enough of the *original* file to re-emit it faithfully. We keep each row's raw
+ * source (keyed by the transaction id it produced) so an export can reproduce the
+ * uploaded statement's exact shape — same columns / block layout — for just the
+ * transactions in the current filtered view, so re-importing looks identical.
+ */
+export interface OriginalSource {
+  format: StatementFormat;
+  /** delimiter + linebreak detected in the original, reused on re-emit. */
+  delimiter: string;
+  newline: string;
+  /** Flat formats (revolut / generic): parsed header names, used to align row data. */
+  columns?: string[];
+  /** Flat formats: the header row exactly as in the source (papaparse renames/trims
+   *  `columns`, so this preserves blank / duplicate / whitespace-padded names verbatim). */
+  headerRow?: string[];
+  /** Flat formats: original row object per transaction id. */
+  flatById?: Record<string, Record<string, string>>;
+  /** BT block format: rows that precede the first transaction (holder, header). */
+  preamble?: string[][];
+  /** BT block format: the raw source rows (date row + detail rows) per transaction id. */
+  blockById?: Record<string, string[][]>;
+}
+
 /** Result of parsing a file: the transactions plus metadata about the parse. */
 export interface ParseResult {
   txns: Txn[];
@@ -68,9 +95,11 @@ export interface ParseResult {
   /** Account holder if the statement exposes one. */
   accountHolder?: string;
   /** Format the parser recognised. */
-  format: "bt-ing-block" | "revolut" | "generic-flat";
+  format: StatementFormat;
   /** Non-fatal notes to surface to the user (e.g. rows skipped). */
   warnings: string[];
+  /** Raw source kept for a faithful "export as original" round-trip. */
+  original?: OriginalSource;
 }
 
 export const BUILTIN_GROUPS: GroupDef[] = [

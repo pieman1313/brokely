@@ -44,8 +44,12 @@ npm run preview  # serve the production build
   tags, search, amount + group exclusions) as a named view and re-apply it in one
   click; rename, update or delete. Saved per browser.
 - **Export** — download the money-flow Sankey as a PNG, or the **current filtered
-  view** of tagged transactions as CSV (the button shows the exact row count it will
-  export). Long tables render only their on-screen rows, so thousands stay smooth.
+  view** as CSV (the button shows the exact row count it will export). **Export CSV**
+  reproduces the *original file's format* — same columns / block layout — for just the
+  filtered rows, so re-importing it looks identical; **Tagged** exports the app's flat
+  view with the derived group / category / tags for spreadsheets. Saving prompts for a
+  file name (the native "Save As" dialog where the browser supports it). Long tables
+  render only their on-screen rows, so thousands stay smooth.
 - **Custom categories & rules** — manually assign a group + category to an entire
   merchant, overriding the automatic tagging everywhere (type a new category name
   to create one). Rules persist in your browser; assign directly from the
@@ -59,7 +63,7 @@ npm run preview  # serve the production build
 - **Supporting views** — stat tiles, monthly in/out/net trend, top categories,
   top merchants, a recurring-commitments (subscriptions & bills) panel, and a
   sortable, expandable transaction table.
-- **Export** the tagged transactions as CSV; toggle light/dark.
+- **Light / dark** theme toggle.
 
 ### A note on "internal" transfers
 
@@ -102,4 +106,13 @@ CSV in Node and checks flow conservation:
 
 ```bash
 npx esbuild scripts/verify.ts --bundle --platform=node --format=esm --outfile=/tmp/v.mjs && node /tmp/v.mjs
+```
+
+`scripts/roundtrip.ts` proves the "export as original format" is faithful — for each
+format it parses a statement, re-emits it, re-parses the export, and asserts the
+transactions are identical (full file byte-identical; a filtered subset identical in
+raw data + category):
+
+```bash
+npx esbuild scripts/roundtrip.ts --bundle --platform=node --format=esm --outfile=/tmp/rt.mjs && node /tmp/rt.mjs
 ```
