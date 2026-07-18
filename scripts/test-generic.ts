@@ -4,6 +4,8 @@ import { applyOverrides } from "../src/lib/overrides";
 import { computeStats } from "../src/lib/analytics";
 import { buildSankey } from "../src/lib/sankey-model";
 import { isCounted, reconcileKey } from "../src/lib/reconcile";
+import { defaultFilters } from "../src/lib/filters";
+import { matchesView } from "../src/lib/views";
 import { BUILTIN_GROUPS } from "../src/types";
 
 let fail = 0;
@@ -158,6 +160,16 @@ Salary Corp,2026-06-06,3000.00`;
       countedAdopted.length === 2 && computeStats(countedAdopted).totalOut === 150,
     `parsed=${all.length} default=${countedDefault.length} adopted=${countedAdopted.length}`
   );
+}
+
+// 12) saved-view equality: matches identical state (order-independent), not a changed one
+{
+  const f = defaultFilters({ minDate: "2025-01-01", maxDate: "2025-12-31" });
+  const v = { id: "x", name: "n", filters: { ...f, groups: ["required", "optional"] }, groupBy: "category" as const, excluded: ["savings"] };
+  const same = matchesView(v, { ...f, groups: ["optional", "required"] }, "category", new Set(["savings"])); // reordered groups + set
+  const diffSearch = matchesView(v, { ...f, groups: ["required", "optional"], search: "coffee" }, "category", new Set(["savings"]));
+  const diffExcl = matchesView(v, { ...f, groups: ["required", "optional"] }, "category", new Set());
+  check("saved view: order-independent match; detects changes", same === true && diffSearch === false && diffExcl === false, `same=${same} diffSearch=${diffSearch} diffExcl=${diffExcl}`);
 }
 
 console.log(fail === 0 ? "\nALL GENERIC TESTS PASS" : `\n${fail} TEST(S) FAILED`);

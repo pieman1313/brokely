@@ -7,6 +7,7 @@ import { computeStats, monthlySeries, topCategories, topMerchants, recurring } f
 import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, categoriesWithGroup, type Overrides } from "./lib/overrides";
 import { loadGroups, saveGroups, groupMap, nextColorVar, slugId } from "./lib/groups";
 import { isCounted, isNonCompleted, reconcileKey, loadReconcile, saveReconcile, type Reconcile, type Decision } from "./lib/reconcile";
+import { loadViews, saveViews, newViewId, matchesView, type SavedView } from "./lib/views";
 import { useLocalStorageState } from "./lib/ui-state";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
@@ -21,6 +22,7 @@ import RecurringPanel from "./components/RecurringPanel";
 import TransactionTable from "./components/TransactionTable";
 import GroupedTable from "./components/GroupedTable";
 import ReconcilePanel from "./components/ReconcilePanel";
+import SavedViews from "./components/SavedViews";
 import Card from "./components/Card";
 import FileLoader from "./components/FileLoader";
 
@@ -59,10 +61,13 @@ export default function App() {
   const [order, setOrder] = useLocalStorageState<string[]>("spend.order", SECTION_IDS);
   const [hidden, setHidden] = useLocalStorageState<string[]>("spend.hidden", []);
   const [reconcile, setReconcile] = useState<Reconcile>(() => loadReconcile());
+  const [views, setViews] = useState<SavedView[]>(() => loadViews());
+  const [baseViewId, setBaseViewId] = useState<string | null>(null);
 
   useEffect(() => saveOverrides(overrides), [overrides]);
   useEffect(() => saveGroups(groups), [groups]);
   useEffect(() => saveReconcile(reconcile), [reconcile]);
+  useEffect(() => saveViews(views), [views]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
   useEffect(() => {
@@ -128,6 +133,13 @@ export default function App() {
     for (const t of txns) u[t.group] = (u[t.group] ?? 0) + 1;
     return u;
   }, [txns]);
+  const activeViewId = useMemo(() => {
+    if (!filters) return null;
+    // prefer the applied view when it still matches, so identical-snapshot views don't mispoint
+    const base = baseViewId ? views.find((v) => v.id === baseViewId) : undefined;
+    if (base && matchesView(base, filters, groupBy, excluded)) return base.id;
+    return views.find((v) => matchesView(v, filters, groupBy, excluded))?.id ?? null;
+  }, [views, filters, groupBy, excluded, baseViewId]);
 
   if (!filters) {
     return (
@@ -174,6 +186,14 @@ export default function App() {
   const bulkDecision = (keys: string[], d: Decision | "reset") =>
     setReconcile((r) => { const n = { ...r }; for (const k of keys) { if (d === "reset") delete n[k]; else n[k] = d; } return n; });
 
+  // saved views
+  const snapshot = () => ({ filters: filters as Filters, groupBy, excluded: [...excluded] });
+  const applyView = (v: SavedView) => { setFilters(v.filters); setGroupBy(v.groupBy); setExcluded(new Set(v.excluded)); setBaseViewId(v.id); };
+  const saveView = (name: string) => { const id = newViewId(); setViews((vs) => [...vs, { id, name, ...snapshot() }]); setBaseViewId(id); };
+  const updateView = (id: string) => { setViews((vs) => vs.map((v) => (v.id === id ? { ...v, ...snapshot() } : v))); setBaseViewId(id); };
+  const renameView = (id: string, name: string) => setViews((vs) => vs.map((v) => (v.id === id ? { ...v, name } : v)));
+  const deleteView = (id: string) => { setViews((vs) => vs.filter((v) => v.id !== id)); setBaseViewId((b) => (b === id ? null : b)); };
+
   // group CRUD
   const addGroup = (label: string, kind: GroupKind) =>
     setGroups((gs) => [...gs, { id: slugId(label, new Set(gs.map((g) => g.id))), label, kind, colorVar: nextColorVar(gs), builtin: false }]);
@@ -188,9 +208,10 @@ export default function App() {
       for (const [k, v] of Object.entries(o)) n[k] = v.group === id ? { ...v, group: "optional" } : v;
       return n;
     });
-    // scrub the dead id from live scoping state so the dashboard can't go blank
+    // scrub the dead id from live scoping state AND saved views so nothing goes blank
     setFilters((f) => (f ? { ...f, groups: f.groups.filter((g) => g !== id) } : f));
     setExcluded((prev) => { const nx = new Set(prev); nx.delete(id); return nx; });
+    setViews((vs) => vs.map((v) => ({ ...v, filters: { ...v.filters, groups: v.filters.groups.filter((g) => g !== id) }, excluded: v.excluded.filter((e) => e !== id) })));
   };
 
   const catItems: BarItem[] = cats.map((c) => ({
@@ -291,7 +312,7 @@ export default function App() {
           </div>
           <span className="privacy" title="All parsing happens in your browser. Nothing is uploaded.">🔒 100% local</span>
           <FileLoader onLoad={load} compact />
-          <button className="btn-ghost" onClick={exportCsv}>Export CSV</button>
+          <button className="btn-ghost" onClick={exportCsv} title="Downloads exactly the transactions in your current filtered view (all filters + group exclusions applied).">Export CSV · {active.length.toLocaleString("en-US")}</button>
           <button className="btn-ghost" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? "☀︎ Light" : "☾ Dark"}
           </button>
@@ -341,6 +362,16 @@ export default function App() {
       ) : (
         <>
           <Card id="filters" title="Filters" subtitle={`${active.length.toLocaleString("en-US")} of ${txns.length.toLocaleString("en-US")} transactions in view`}>
+            <SavedViews
+              views={views}
+              activeId={activeViewId}
+              baseId={baseViewId}
+              onApply={applyView}
+              onSave={saveView}
+              onUpdate={updateView}
+              onRename={renameView}
+              onDelete={deleteView}
+            />
             <FilterBar
               filters={filters}
               bounds={bounds}

@@ -40,8 +40,12 @@ npm run preview  # serve the production build
   money flows into (Configure → Top-level groups). A group's *behaviour*
   (income / spending / to-people / savings) decides which side of the flow it sits
   on, so custom groups get their own Sankey branch. Built-ins can't be deleted.
-- **Export** — download the money-flow Sankey as a PNG, or the tagged transactions
-  as CSV. Long tables render only their on-screen rows, so thousands stay smooth.
+- **Saved views** — save the current filter state (date range, groups, categories,
+  tags, search, amount + group exclusions) as a named view and re-apply it in one
+  click; rename, update or delete. Saved per browser.
+- **Export** — download the money-flow Sankey as a PNG, or the **current filtered
+  view** of tagged transactions as CSV (the button shows the exact row count it will
+  export). Long tables render only their on-screen rows, so thousands stay smooth.
 - **Custom categories & rules** — manually assign a group + category to an entire
   merchant, overriding the automatic tagging everywhere (type a new category name
   to create one). Rules persist in your browser; assign directly from the
