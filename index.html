@@ -2,13 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>Spend · money-flow visualiser</title>
+    <title>Brokely · where did my money go?</title>
     <meta
       name="description"
       content="Private, in-browser Sankey visualiser for bank statement CSVs. Nothing leaves your machine."
     />
+
+    <!-- icons + installable PWA (all served from the app's base path) -->
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0d0d0d" id="theme-color" />
+    <script>
+      // Match the browser chrome to the OS colour scheme on first paint (before the
+      // app's JS runs), so light-mode users don't get a dark address-bar flash. The
+      // app keeps this in sync afterwards when the theme is toggled.
+      try {
+        if (matchMedia("(prefers-color-scheme: light)").matches)
+          document.getElementById("theme-color").content = "#f9f9f7";
+      } catch (e) {}
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Brokely" />
   </head>
   <body>
     <div id="root"></div>

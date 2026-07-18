@@ -70,7 +70,13 @@ export default function App() {
   useEffect(() => saveGroups(groups), [groups]);
   useEffect(() => saveReconcile(reconcile), [reconcile]);
   useEffect(() => saveViews(views), [views]);
-  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    // keep the PWA / mobile browser chrome colour in sync with the page background
+    const page = getComputedStyle(document.documentElement).getPropertyValue("--page").trim();
+    const meta = document.getElementById("theme-color");
+    if (page && meta) meta.setAttribute("content", page);
+  }, [theme]);
 
   useEffect(() => {
     fetch(import.meta.env.BASE_URL + "sample-statement.csv")
@@ -147,8 +153,8 @@ export default function App() {
     return (
       <div className="splash">
         <div className="splash-card">
-          <div className="brand-mark splash-mark">₿</div>
-          <h1>Spend</h1>
+          <img className="brand-mark splash-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={56} height={56} />
+          <h1>Brokely</h1>
           <p className="splash-tag">
             See where your money actually goes. Drop a bank-statement CSV and get an
             interactive money-flow Sankey, live filters, and automatic tagging.
@@ -302,9 +308,9 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">₿</span>
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={38} height={38} />
           <div>
-            <h1>Spend</h1>
+            <h1>Brokely</h1>
             <span className="brand-sub">money-flow visualiser · <b>{fileName}</b></span>
           </div>
         </div>

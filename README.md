@@ -1,4 +1,4 @@
-# Spend — money-flow visualiser
+# Brokely — money-flow visualiser
 
 A private, in-browser app that turns a bank-statement CSV into an interactive
 **Sankey money-flow diagram** plus supporting charts. Feed it a statement, filter
@@ -6,6 +6,10 @@ freely, and watch every view refresh instantly.
 
 > **Everything runs in your browser.** Your statement is parsed locally and is
 > never uploaded anywhere — there is no server and no telemetry.
+
+**Installable & offline** — Brokely is a PWA: "Add to Home Screen" gives it an app
+icon and its own window, and a service worker caches the app shell so it opens with
+no network. It only ever caches Brokely's own files — never your statement.
 
 ## Run it
 
