@@ -57,6 +57,7 @@ export default function ReconcilePanel({ items, reconcile, currency, groupLabels
       {visible.length === 0 ? (
         <p className="rules-empty">All non-completed transactions have been removed. Use “Restore removed” to bring them back.</p>
       ) : (
+        <div className="table-scroll">
         <table className="mini-table reconcile-table">
           <thead>
             <tr>
@@ -98,6 +99,7 @@ export default function ReconcilePanel({ items, reconcile, currency, groupLabels
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

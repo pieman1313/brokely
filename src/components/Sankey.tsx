@@ -26,6 +26,8 @@ type LayoutLink = Omit<SLink, "source" | "target"> & {
 
 const MARGIN = { top: 16, right: 168, bottom: 16, left: 150 };
 const NODE_W = 15;
+// below this, cramming makes labels overlap — draw at least this wide and let the card scroll
+const MIN_DRAW_WIDTH = 720;
 const NODE_PAD = 13;
 
 export default function Sankey({ model, currency, onPickGroup, onPickCategory }: Props) {
@@ -53,6 +55,9 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
   // tooltip never dereferences a node/link that no longer exists.
   useEffect(() => setHover(null), [model]);
 
+  // draw at least MIN_DRAW_WIDTH; on narrow screens the card scrolls horizontally
+  const drawWidth = Math.max(width, MIN_DRAW_WIDTH);
+
   // tallest column drives the height so nodes never get razor-thin
   const height = useMemo(() => {
     const byDepthGuess = new Map<string, number>();
@@ -73,7 +78,7 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
       .nodeAlign(sankeyJustify)
       .extent([
         [MARGIN.left, MARGIN.top],
-        [Math.max(MARGIN.left + 60, width - MARGIN.right), height - MARGIN.bottom],
+        [Math.max(MARGIN.left + 60, drawWidth - MARGIN.right), height - MARGIN.bottom],
       ]);
     // clone so d3 mutation never touches the memoised model
     const input: SankeyGraph<SNode, SLink> = {
@@ -81,7 +86,7 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
       links: model.links.map((d) => ({ ...d })),
     };
     return layout(input) as unknown as { nodes: LayoutNode[]; links: LayoutLink[] };
-  }, [model, width, height]);
+  }, [model, drawWidth, height]);
 
   if (!graph) {
     return (
@@ -102,7 +107,8 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
 
   return (
     <div ref={wrapRef} className="sankey-wrap">
-      <svg ref={svgRef} width={width} height={height} role="img" aria-label="Money flow diagram">
+      <div className="sankey-scroll">
+      <svg ref={svgRef} width={drawWidth} height={height} role="img" aria-label="Money flow diagram">
         {/* links */}
         <g fill="none">
           {graph.links.map((l, i) => (
@@ -121,7 +127,7 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
         {/* nodes */}
         <g>
           {graph.nodes.map((n, i) => {
-            const leftHalf = (n.x0 + n.x1) / 2 < width / 2;
+            const leftHalf = (n.x0 + n.x1) / 2 < drawWidth / 2;
             const clickable = n.kind === "group" || (n.kind === "category" && n.label !== "Other (small)");
             const labelX = leftHalf ? n.x0 - 8 : n.x1 + 8;
             return (
@@ -155,6 +161,7 @@ export default function Sankey({ model, currency, onPickGroup, onPickCategory }:
           })}
         </g>
       </svg>
+      </div>
 
       {hover && (
         <Tooltip

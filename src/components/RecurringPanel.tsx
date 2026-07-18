@@ -10,6 +10,7 @@ interface Props {
 export default function RecurringPanel({ items, currency }: Props) {
   if (items.length === 0) return <div className="chart-empty">No recurring commitments detected.</div>;
   return (
+    <div className="table-scroll">
     <table className="mini-table">
       <thead>
         <tr>
@@ -32,5 +33,6 @@ export default function RecurringPanel({ items, currency }: Props) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

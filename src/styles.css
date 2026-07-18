@@ -205,7 +205,7 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 
 /* ---------------- stat tiles ---------------- */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; box-shadow: var(--shadow); }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; box-shadow: var(--shadow); min-width: 0; }
 .tile-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tile-value { font-size: 21px; font-weight: 680; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile-value.pos { color: var(--pos); }
@@ -246,7 +246,10 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .slider input { accent-color: var(--g-required); width: 150px; }
 
 /* ---------------- sankey ---------------- */
+/* clip the absolutely-positioned tooltip so it can never push page-wide horizontal
+   scroll on mobile; the chart's own horizontal scroll lives on .sankey-scroll below */
 .sankey-wrap { position: relative; width: 100%; overflow: hidden; }
+.sankey-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
 .sankey-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
 .sankey-foot .btn-ghost { font-size: 12px; padding: 5px 11px; }
 .sankey-empty, .chart-empty { color: var(--muted); text-align: center; padding: 40px 0; }
@@ -293,8 +296,12 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 /* ---------------- tables ---------------- */
 /* Transactions use CSS-grid block rows so content-visibility can skip off-screen
    rows (it is a no-op on <tr>). This virtualises the scroll with variable heights. */
-.txn-scroll { max-height: 620px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
-.vtable { --vt-cols: 116px minmax(140px, 1.5fr) minmax(150px, 1.5fr) minmax(84px, 0.8fr) 120px; font-size: 13px; }
+.txn-scroll { max-height: 620px; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
+.vtable { --vt-cols: 116px minmax(140px, 1.5fr) minmax(150px, 1.5fr) minmax(84px, 0.8fr) 120px; font-size: 13px; min-width: 660px; }
+/* horizontal-scroll wrapper for wide data tables (recurring / reconcile) on narrow screens */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll .mini-table { min-width: 520px; }
+.table-scroll .reconcile-table { min-width: 660px; }
 .vt-head, .vt-row { display: grid; grid-template-columns: var(--vt-cols); align-items: center; gap: 10px; padding: 8px 11px; }
 .vt-head { position: sticky; top: 0; z-index: 1; background: var(--surface-1); border-bottom: 1px solid var(--border); }
 .vt-head .vt-cell { background: transparent; border: none; color: var(--muted); font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; text-align: left; padding: 0; }
@@ -335,8 +342,8 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .segmented button { border: none; border-radius: 0; background: var(--surface-1); color: var(--text-secondary); padding: 6px 13px; font-size: 12.5px; }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button.on { background: var(--g-required); color: #fff; }
-.grouped-scroll { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
-.grouped-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.grouped-scroll { max-height: 360px; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
+.grouped-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 13px; }
 .grouped-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-1); text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .grouped-table td { padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
 .grouped-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -438,3 +445,57 @@ span.group-kind { display: inline-flex; align-items: center; }
 .drop-card { border: 2px dashed var(--g-required); color: var(--text-primary); background: var(--surface-1); border-radius: 18px; padding: 40px 60px; font-size: 18px; font-weight: 600; box-shadow: var(--shadow); }
 
 .error { color: var(--neg); }
+
+/* ================= mobile / narrow screens ================= */
+@media (max-width: 720px) {
+  .app { padding: 12px 12px 48px; }
+  .card { padding: 14px 14px; }
+  .topbar { gap: 10px; }
+  h1 { font-size: 18px; }
+
+  /* card header: let the actions (e.g. the money-flow slider) wrap to their own line */
+  .card-head { flex-wrap: wrap; }
+  .card-actions { order: 10; flex-basis: 100%; margin-top: 4px; justify-content: flex-start; }
+  .slider { flex-direction: row; align-items: center; width: 100%; gap: 8px; }
+  .slider input { flex: 1; width: auto; }
+
+  /* filters reflow: rows stack, controls go full-width, date inputs share a line */
+  .fb-row { gap: 10px 12px; }
+  .fb-group { flex-wrap: wrap; }
+  .fb-group.grow, .search { width: 100%; flex-basis: 100%; }
+  .date-in { flex: 1 1 42%; min-width: 128px; }
+  .date-in input { width: 100%; }
+  .amt { flex: 1 1 40%; }
+  .multiselect .ms-menu { min-width: 200px; }
+
+  /* saved views + sections controls */
+  .views-bar { gap: 8px; }
+  .views-save { margin-left: 0; width: 100%; }
+  .view-name { flex: 1; width: auto; }
+  .sections-bar { flex-wrap: wrap; }
+
+  /* stacked config forms */
+  .rules-form { flex-direction: column; align-items: stretch; }
+  .rules-field { width: 100%; min-width: 0; }
+  .rules-add { width: 100%; }
+  .rules-item { flex-wrap: wrap; }
+  .rules-who { max-width: 100%; }
+
+  /* groups panel rows reflow instead of clipping */
+  .group-row { flex-wrap: wrap; gap: 8px; }
+  .group-label { flex: 1 1 60%; min-width: 120px; }
+  .group-kind { flex: 1 1 100%; min-width: 0; }
+  .group-usage { text-align: left; min-width: 0; }
+
+  /* stat tiles: two per row */
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .tile-value { font-size: 18px; }
+
+  /* reconcile bulk buttons wrap */
+  .reconcile-head { align-items: flex-start; }
+}
+
+@media (max-width: 420px) {
+  .tiles { grid-template-columns: 1fr; }
+  .brand-sub { display: none; }
+}
