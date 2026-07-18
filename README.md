@@ -94,10 +94,10 @@ To tune categorisation for your merchants, edit the ruleset in
 
 This is a static site, so it deploys itself. A push to `master` runs
 `.github/workflows/deploy.yml`, which builds and publishes to GitHub Pages at
-`https://<user>.github.io/spend/`. The deployed app ships **no data** — everyone
+`https://<user>.github.io/brokely/`. The deployed app ships **no data** — everyone
 who opens it loads their own CSV, parsed locally in their own browser.
 
-The build base path defaults to `/spend/`; if you fork under a different repo name,
+The build base path defaults to `/brokely/`; if you fork under a different repo name,
 build with `VITE_BASE=/your-repo/ npm run build` (the workflow reads `VITE_BASE`).
 
 > Never commit or deploy a real statement. `public/sample-statement.csv` and

@@ -8,7 +8,7 @@
  * HTML, falling back to the cached shell when offline); hashed assets are served
  * cache-first with a background refresh. Bump CACHE to purge old versions. */
 const CACHE = "brokely-v2";
-const SHELL = new URL("./", self.location).href; // the app root, e.g. /spend/
+const SHELL = new URL("./", self.location).href; // the app root, e.g. /brokely/
 const NAV_TIMEOUT = 3500; // ms before a stalled navigation falls back to the cached shell
 
 self.addEventListener("install", (event) => {

@@ -9,6 +9,6 @@ import react from "@vitejs/plugin-react";
 // differs (e.g. `VITE_BASE=/my-fork/ npm run build`).
 export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: command === "build" ? process.env.VITE_BASE ?? "/spend/" : "/",
+  base: command === "build" ? process.env.VITE_BASE ?? "/brokely/" : "/",
   server: { open: true },
 }));
