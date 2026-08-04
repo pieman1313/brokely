@@ -106,8 +106,26 @@ function parseBT(rows: string[][], delimiter = ",", newline = "\n"): ParseResult
   let cur: Cur | null = null;
   let lastKey = ""; // most-recent detail key, so wrapped values can be appended
 
+  // Column layout varies between BT/ING export variants: some carry an extra
+  // spacer and a trailing "Balanta" column, which shifts Debit/Credit. Learn the
+  // positions from the header row instead of hardcoding them (defaults match the
+  // classic 7-column layout: type@3, debit@5, credit@6).
+  let detailIdx = 3, debitIdx = 5, creditIdx = 6;
+  let layoutKnown = false;
+
   for (const row of rows) {
     const c0 = (row[0] ?? "").trim();
+    if (!layoutKnown) {
+      const di = row.findIndex((c) => (c ?? "").trim().toLowerCase() === "debit");
+      const ci = row.findIndex((c) => (c ?? "").trim().toLowerCase() === "credit");
+      if (di > -1 && ci > -1) {
+        debitIdx = di;
+        creditIdx = ci;
+        const ti = row.findIndex((c) => /detalii/i.test(c ?? ""));
+        if (ti > -1) detailIdx = ti;
+        layoutKnown = true;
+      }
+    }
     if (/^Titular cont:/i.test(c0)) {
       accountHolder = c0.replace(/^Titular cont:\s*/i, "").trim();
       if (!cur) preamble.push(row);
@@ -128,16 +146,16 @@ function parseBT(rows: string[][], delimiter = ",", newline = "\n"): ParseResult
       const year = +m[3];
       cur = {
         dateISO: `${year}-${String(monthNum).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-        type: (row[3] ?? "").trim(),
-        debit: parseAmountEuro(row[5] ?? ""),
-        credit: parseAmountEuro(row[6] ?? ""),
+        type: (row[detailIdx] ?? "").trim(),
+        debit: parseAmountEuro(row[debitIdx] ?? ""),
+        credit: parseAmountEuro(row[creditIdx] ?? ""),
         details: {},
         raw: [row],
       };
     } else if (cur && c0 === "") {
       // continuation detail line, e.g. "Tranzactie la:DIGI ROMANIA SA  RO  BUCURESTI"
       cur.raw.push(row);
-      const detail = (row[3] ?? "").trim();
+      const detail = (row[detailIdx] ?? "").trim();
       if (!detail) continue;
       const idx = detail.indexOf(":");
       if (idx > -1) {

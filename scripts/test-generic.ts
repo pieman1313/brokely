@@ -172,5 +172,25 @@ Salary Corp,2026-06-06,3000.00`;
   check("saved view: order-independent match; detects changes", same === true && diffSearch === false && diffExcl === false, `same=${same} diffSearch=${diffSearch} diffExcl=${diffExcl}`);
 }
 
+// 13) BT/ING export variant where extra columns (spacer + trailing "Balanta")
+//     shift Debit from col 5 to col 4 — debit/credit indices must be read from the
+//     header, not hardcoded, or every spend row reads 0 and looks like all-income.
+{
+  const csv = `Titular cont: DL Test,,,,,,,
+Data,,,Detalii tranzactie,Debit,,Credit,Balanta
+05 iunie 2026,,,Cumparare POS,"680,00",,,"1.815,17"
+,,,Tranzactie la:MEGA IMAGE  RO  TIMISOARA,,,,
+05 iunie 2026,,,Incasare,,,"1.000,00","2.815,17"
+,,,Ordonator:Someone Else,,,,`;
+  const r = parseStatement(csv).txns;
+  const pos = r.find((t) => t.type === "Cumparare POS");
+  const inc = r.find((t) => t.type === "Incasare");
+  check(
+    "BT shifted columns (Balanta): POS is a real outflow, Incasare is inflow",
+    !!pos && pos.debit === 680 && pos.direction === "out" && !!inc && inc.credit === 1000,
+    `pos.debit=${pos?.debit} pos.dir=${pos?.direction} inc.credit=${inc?.credit}`
+  );
+}
+
 console.log(fail === 0 ? "\nALL GENERIC TESTS PASS" : `\n${fail} TEST(S) FAILED`);
 process.exit(fail === 0 ? 0 : 1);
