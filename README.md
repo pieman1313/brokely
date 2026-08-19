@@ -64,6 +64,15 @@ npm run preview  # serve the production build
   checkbox (ticked by default); unticking one drops it from **every** chart, tile
   and total. A header checkbox toggles all (with an indeterminate state), and each
   row expands to show its transactions.
+- **Single rows — include / exclude** — every row in the transactions table has a
+  checkbox too, for when a whole group is too coarse. Untick a row and it leaves
+  every chart, tile, total and export, while staying visible (struck through) so
+  you can put it back; "Restore all" clears them at once. Handy for one leg of an
+  internal transfer: a move to a Revolut savings vault books as two rows (−10 out,
+  +10 in) and the inflow leg can otherwise land on the income side — untick it and
+  only the real outflow counts. Choices are keyed by row *content*, not position,
+  so they survive re-importing a fresh download of the same account, and persist
+  per browser (they're a lasting correction, so they aren't part of a saved view).
 - **Supporting views** — stat tiles, monthly in/out/net trend, top categories,
   top merchants, a recurring-commitments (subscriptions & bills) panel, and a
   sortable, expandable transaction table.

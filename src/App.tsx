@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Group, GroupDef, GroupKind, ParseResult } from "./types";
+import type { Group, GroupDef, GroupKind, ParseResult, Txn } from "./types";
 import { parseStatement } from "./lib/parse";
 import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
@@ -8,6 +8,7 @@ import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, catego
 import { loadGroups, saveGroups, groupMap, nextColorVar, slugId } from "./lib/groups";
 import { isCounted, isNonCompleted, reconcileKey, loadReconcile, saveReconcile, type Reconcile, type Decision } from "./lib/reconcile";
 import { loadViews, saveViews, newViewId, matchesView, type SavedView } from "./lib/views";
+import { keyRows, loadRowExcludes, saveRowExcludes } from "./lib/row-exclude";
 import { useLocalStorageState } from "./lib/ui-state";
 import { iconFor } from "./lib/tagging";
 import { money2 } from "./lib/format";
@@ -63,12 +64,14 @@ export default function App() {
   const [order, setOrder] = useLocalStorageState<string[]>("spend.order", SECTION_IDS);
   const [hidden, setHidden] = useLocalStorageState<string[]>("spend.hidden", []);
   const [reconcile, setReconcile] = useState<Reconcile>(() => loadReconcile());
+  const [excludedRows, setExcludedRows] = useState<Set<string>>(() => loadRowExcludes());
   const [views, setViews] = useState<SavedView[]>(() => loadViews());
   const [baseViewId, setBaseViewId] = useState<string | null>(null);
 
   useEffect(() => saveOverrides(overrides), [overrides]);
   useEffect(() => saveGroups(groups), [groups]);
   useEffect(() => saveReconcile(reconcile), [reconcile]);
+  useEffect(() => saveRowExcludes(excludedRows), [excludedRows]);
   useEffect(() => saveViews(views), [views]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -113,11 +116,26 @@ export default function App() {
   const gmap = useMemo(() => groupMap(groups), [groups]);
   const groupLabelMap = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g.label])), [groups]);
 
+  // stable per-row exclusion keys (content-based, so they survive a re-import)
+  const rowKeys = useMemo(() => keyRows(tagged), [tagged]);
+  const keyOf = (t: Txn) => rowKeys.get(t.id) ?? t.id;
+
   const filtered = useMemo(() => (filters ? applyFilters(txns, filters) : txns), [txns, filters]);
-  const active = useMemo(
-    () => (excluded.size ? filtered.filter((t) => !excluded.has(groupKeyOf(t, groupBy))) : filtered),
-    [filtered, excluded, groupBy]
+  // rows the user unticked individually — out of every chart, tile, total and export
+  const kept = useMemo(
+    () => (excludedRows.size ? filtered.filter((t) => !excludedRows.has(keyOf(t))) : filtered),
+    [filtered, excludedRows, rowKeys]
   );
+  const dropGroups = (list: Txn[]) => (excluded.size ? list.filter((t) => !excluded.has(groupKeyOf(t, groupBy))) : list);
+  const active = useMemo(() => dropGroups(kept), [kept, excluded, groupBy]);
+  // what the transactions table renders: excluded rows stay visible so they can be re-ticked
+  const rowsInView = useMemo(() => dropGroups(filtered), [filtered, excluded, groupBy]);
+  // keys excluded *in this statement* — "restore" must not touch another file's choices
+  const excludedHere = useMemo(
+    () => tagged.filter((t) => excludedRows.has(keyOf(t))).map((t) => keyOf(t)),
+    [tagged, excludedRows, rowKeys]
+  );
+  const excludedInDataset = excludedHere.length;
 
   const model = useMemo(() => buildSankey(active, minFlowPct, groups), [active, minFlowPct, groups]);
   const stats = useMemo(() => computeStats(active), [active]);
@@ -182,6 +200,15 @@ export default function App() {
   const setManyGroups = (keys: string[], included: boolean) =>
     setExcluded((prev) => { const next = new Set(prev); for (const k of keys) (included ? next.delete(k) : next.add(k)); return next; });
   const changeGroupBy = (d: GroupDim) => { if (d === groupBy) return; setGroupBy(d); setExcluded(new Set()); };
+
+  // per-row include / exclude (a lasting data correction, not part of a saved view)
+  const toggleRow = (key: string) =>
+    setExcludedRows((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  const setManyRows = (keys: string[], included: boolean) =>
+    setExcludedRows((prev) => { const next = new Set(prev); for (const k of keys) (included ? next.delete(k) : next.add(k)); return next; });
+  // only clear what belongs to the loaded statement, so choices made on another file survive
+  const restoreAllRows = () =>
+    setExcludedRows((prev) => { const next = new Set(prev); for (const k of excludedHere) next.delete(k); return next; });
 
   const setOverride = (who: string, group: Group, category: string) => setOverrides((o) => ({ ...o, [who]: { group, category } }));
   const removeOverride = (who: string) => setOverrides((o) => { const n = { ...o }; delete n[who]; return n; });
@@ -271,6 +298,8 @@ export default function App() {
       case "groups-exclude":
         return (
           <Card key={id} {...shared} title="Groups — include or exclude" subtitle="Untick a group to drop it from every chart, tile and total below. Search, expand a row to see its transactions, or use the header box to toggle all.">
+            {/* `filtered`, not `kept`: a group whose every row is unticked must still list,
+                or its checkbox (and the rows behind it) would become unreachable. */}
             <GroupedTable txns={filtered} currency={currency} dim={groupBy} onDimChange={changeGroupBy} excluded={excluded} onToggle={toggleGroup} onSetMany={setManyGroups} overrides={overrides} onAssign={assign} groupLabels={groupLabelMap} />
           </Card>
         );
@@ -295,8 +324,25 @@ export default function App() {
         return <Card key={id} {...shared} title="Recurring & subscriptions"><RecurringPanel items={recur} currency={currency} /></Card>;
       case "transactions":
         return (
-          <Card key={id} {...shared} title="Transactions" subtitle={`${active.length.toLocaleString("en-US")} counted${excluded.size ? ` · ${filtered.length - active.length} hidden by group exclusions` : ""} · click a row for details`}>
-            <TransactionTable txns={active} currency={currency} groupLabels={groupLabelMap} />
+          <Card
+            key={id}
+            {...shared}
+            title="Transactions"
+            subtitle={`${active.length.toLocaleString("en-US")} counted${
+              excluded.size ? ` · ${kept.length - active.length} hidden by group exclusions` : ""
+            }${excludedInDataset ? ` · ${excludedInDataset} row${excludedInDataset === 1 ? "" : "s"} unticked` : ""} · untick a row to drop it from every total; click it for details`}
+          >
+            <TransactionTable
+              txns={rowsInView}
+              currency={currency}
+              groupLabels={groupLabelMap}
+              rowKeys={rowKeys}
+              excludedRows={excludedRows}
+              onToggleRow={toggleRow}
+              onSetManyRows={setManyRows}
+              totalExcluded={excludedInDataset}
+              onRestoreAll={restoreAllRows}
+            />
           </Card>
         );
       default:
@@ -331,6 +377,14 @@ export default function App() {
 
       {error && <div className="banner error">{error}</div>}
       {parsed?.warnings.map((w, i) => <div className="banner warn" key={i}>{w}</div>)}
+      {/* Always visible (both tabs): the transactions card can be collapsed or hidden, and
+          these exclusions persist, so this is the one place that can't disappear. */}
+      {excludedInDataset > 0 && (
+        <div className="banner warn reconcile-banner">
+          <span><b>{excludedInDataset}</b> row{excludedInDataset === 1 ? " is" : "s are"} unticked, so {excludedInDataset === 1 ? "it is" : "they are"} left out of every chart, tile, total and export.</span>
+          <button className="btn-ghost" onClick={restoreAllRows}>Restore rows</button>
+        </div>
+      )}
       {undecidedCount > 0 && tab === "dashboard" && (
         <div className="banner warn reconcile-banner">
           <span><b>{undecidedCount}</b> pending/reverted transaction{undecidedCount === 1 ? " is" : "s are"} excluded from the totals until you reconcile them.</span>

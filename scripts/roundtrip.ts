@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { parseStatement } from "../src/lib/parse";
 import { toOriginalCsv } from "../src/lib/export-csv";
+import { keyRows } from "../src/lib/row-exclude";
 import type { Txn } from "../src/types";
 
 let failures = 0;
@@ -75,6 +76,60 @@ const generic = `Date,Description,Debit,Credit
 2024-02-03,"Grocery, Big Store",88.20,
 2024-02-04,Refund Amazon,,19.99`;
 roundtrip("Generic", generic, (t) => t.credit > 0);
+
+// ---- row exclusions must survive the export → re-import round-trip ----
+// Regression: keys were once separated only by a positional #n counter within a group of
+// same-day/same-amount/same-merchant rows, so exporting (which drops the excluded row)
+// renumbered the survivor into the excluded key and silently deleted a DIFFERENT, real
+// transaction — compounding on every cycle. The key now folds in the statement's own raw
+// detail lines (authorisation number, reference, IBAN…), which tell siblings apart.
+{
+  try {
+    const text = readFileSync(`${process.cwd()}/public/sample-statement.csv`, "utf8");
+    const parsed = parseStatement(text);
+    const keys = keyRows(parsed.txns);
+
+    const positional = parsed.txns.filter((t) => (keys.get(t.id) ?? "").includes("#")).length;
+    check("row keys: no row falls back to a positional counter", positional === 0, `${positional} of ${parsed.txns.length}`);
+
+    // pick a real cluster of rows identical in everything except their raw details
+    const groups = new Map<string, Txn[]>();
+    for (const t of parsed.txns) {
+      const k = [t.date, t.type, t.who, t.debit.toFixed(2), t.credit.toFixed(2)].join("|");
+      const arr = groups.get(k);
+      arr ? arr.push(t) : groups.set(k, [t]);
+    }
+    const cluster = [...groups.values()].find((v) => v.length > 1);
+    check("sample statement contains a duplicate-signature cluster to test", !!cluster, `${[...groups.values()].filter((v) => v.length > 1).length} clusters`);
+
+    if (cluster && parsed.original) {
+      check(
+        "row keys: siblings in a duplicate cluster are distinct",
+        new Set(cluster.map((t) => keys.get(t.id))).size === cluster.length
+      );
+
+      // exclude one sibling, then export → re-import three times
+      const excluded = new Set([keys.get(cluster[0].id)!]);
+      let txns = parsed.txns;
+      let ks = keys;
+      let src = parsed.original;
+      let ok = true;
+      let detail = "";
+      for (let cycle = 1; cycle <= 3; cycle++) {
+        const active = txns.filter((t) => !excluded.has(ks.get(t.id)!));
+        const re = parseStatement(toOriginalCsv(active, src));
+        const reKeys = keyRows(re.txns);
+        const counted = re.txns.filter((t) => !excluded.has(reKeys.get(t.id)!));
+        // the export already omitted the excluded row, so NOTHING may drop on re-import
+        if (counted.length !== re.txns.length) { ok = false; detail = `cycle ${cycle} dropped ${re.txns.length - counted.length} extra`; break; }
+        txns = re.txns; ks = reKeys; src = re.original!;
+      }
+      check("excluding one duplicate never deletes its sibling across export → re-import", ok, detail);
+    }
+  } catch (e) {
+    check("row-exclusion round-trip could run", false, (e as Error).message);
+  }
+}
 
 // ---- header fidelity: tricky headers must survive byte-for-byte ----
 // (whitespace-padded, duplicate, and trailing-blank column names)

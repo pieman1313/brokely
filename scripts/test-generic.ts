@@ -6,6 +6,7 @@ import { buildSankey } from "../src/lib/sankey-model";
 import { isCounted, reconcileKey } from "../src/lib/reconcile";
 import { defaultFilters } from "../src/lib/filters";
 import { matchesView } from "../src/lib/views";
+import { keyRows } from "../src/lib/row-exclude";
 import { BUILTIN_GROUPS } from "../src/types";
 
 let fail = 0;
@@ -189,6 +190,91 @@ Data,,,Detalii tranzactie,Debit,,Credit,Balanta
     "BT shifted columns (Balanta): POS is a real outflow, Incasare is inflow",
     !!pos && pos.debit === 680 && pos.direction === "out" && !!inc && inc.credit === 1000,
     `pos.debit=${pos?.debit} pos.dir=${pos?.direction} inc.credit=${inc?.credit}`
+  );
+}
+
+// 14) per-row exclusion keys: the two legs of an internal transfer (-10 / +10 on the
+//     same day, same description) must get DIFFERENT keys, so the inflow leg can be
+//     dropped on its own; and excluding it must remove it from the totals.
+{
+  const csv = `Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Card Payment,Current,2026-01-02 10:00:00,2026-01-02 12:00:00,Lidl,-42.50,0.00,RON,COMPLETED,900.00
+Transfer,Current,2026-01-03 09:00:00,2026-01-03 09:00:00,To Emergency Fund,-10.00,0.00,RON,COMPLETED,890.00
+Transfer,Savings,2026-01-03 09:00:00,2026-01-03 09:00:00,To Emergency Fund,10.00,0.00,RON,COMPLETED,10.00`;
+  const txns = parseStatement(csv).txns;
+  const keys = keyRows(txns);
+  const out = txns.find((t) => t.debit === 10)!;
+  const inn = txns.find((t) => t.credit === 10)!;
+  check(
+    "row keys: the -10 and +10 legs of one transfer are independently selectable",
+    keys.get(out.id) !== keys.get(inn.id),
+    `${keys.get(out.id)} vs ${keys.get(inn.id)}`
+  );
+
+  const before = computeStats(txns);
+  const kept = txns.filter((t) => keys.get(t.id) !== keys.get(inn.id));
+  const after = computeStats(kept);
+  check(
+    "excluding the +10 leg drops it from income but keeps the -10 outflow",
+    before.totalIn === 10 && after.totalIn === 0 && after.totalOut === before.totalOut,
+    `in ${before.totalIn}→${after.totalIn}, out ${before.totalOut}→${after.totalOut}`
+  );
+}
+
+// 15) row keys must disambiguate genuine duplicates, and must NOT change when a
+//     merchant is re-tagged by an override (or every exclusion would be orphaned).
+{
+  const csv = `Date,Description,Debit,Credit
+2026-02-01,Coffee Bar,5.00,
+2026-02-01,Coffee Bar,5.00,
+2026-02-02,Lidl,20.00,`;
+  const txns = parseStatement(csv).txns;
+  const keys = keyRows(txns);
+  const dupes = txns.filter((t) => t.who === "Coffee Bar");
+  check(
+    "row keys: two identical same-day rows get distinct keys",
+    dupes.length === 2 && keys.get(dupes[0].id) !== keys.get(dupes[1].id),
+    [...keys.values()].join("  ")
+  );
+
+  const retagged = applyOverrides(txns, { "Coffee Bar": { group: "required", category: "Groceries" } }, BUILTIN_GROUPS);
+  const keys2 = keyRows(retagged);
+  const stable = txns.every((t) => keys.get(t.id) === keys2.get(t.id));
+  check("row keys survive re-tagging a merchant (override-invariant)", stable);
+}
+
+// 16) two rows identical except for the statement's own detail lines (authorisation
+//     number) must get distinct keys, and removing one must NOT shift the other's key —
+//     otherwise exporting the filtered view silently deletes the surviving sibling.
+{
+  const csv = `Titular cont: DL Test,,,,,,
+Data,,,Detalii tranzactie,,Debit,Credit
+10 mai 2026,,,Cumparare POS,,"10,00",
+,,,Tranzactie la:ENERGY GAMES  RO  TIMISOARA,,,
+,,,Numar autorizare:250035,,,
+10 mai 2026,,,Cumparare POS,,"10,00",
+,,,Tranzactie la:ENERGY GAMES  RO  TIMISOARA,,,
+,,,Numar autorizare:367826,,,`;
+  const txns = parseStatement(csv).txns;
+  const keys = keyRows(txns);
+  check("row keys: same-day same-amount rows differ by authorisation number", txns.length === 2 && keys.get(txns[0].id) !== keys.get(txns[1].id), [...keys.values()].join(" "));
+  check("row keys: no positional fallback needed for those rows", ![...keys.values()].some((k) => k.includes("#")));
+
+  // drop the first row (what an export of the filtered view does) → survivor keeps its key
+  const survivorKeyBefore = keys.get(txns[1].id);
+  const afterKeys = keyRows([txns[1]]);
+  check("row keys: removing a sibling does not change the survivor's key", afterKeys.get(txns[1].id) === survivorKeyBefore, `${survivorKeyBefore} vs ${afterKeys.get(txns[1].id)}`);
+}
+
+// 17) keys are opaque hashes — no readable merchant/amount is persisted to localStorage
+{
+  const csv = `Date,Description,Debit,Credit
+2026-02-01,SECRET MERCHANT NAME,123.45,`;
+  const keys = [...keyRows(parseStatement(csv).txns).values()];
+  check(
+    "row keys leak no plaintext transaction data",
+    keys.length === 1 && !/SECRET|123\.45|2026-02-01/.test(keys[0]),
+    keys[0]
   );
 }
 

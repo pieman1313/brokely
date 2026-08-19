@@ -299,7 +299,7 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 /* Transactions use CSS-grid block rows so content-visibility can skip off-screen
    rows (it is a no-op on <tr>). This virtualises the scroll with variable heights. */
 .txn-scroll { max-height: 620px; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
-.vtable { --vt-cols: 116px minmax(140px, 1.5fr) minmax(150px, 1.5fr) minmax(84px, 0.8fr) 120px; font-size: 13px; min-width: 660px; }
+.vtable { --vt-cols: 30px 116px minmax(140px, 1.5fr) minmax(150px, 1.5fr) minmax(84px, 0.8fr) 120px; font-size: 13px; min-width: 700px; }
 /* horizontal-scroll wrapper for wide data tables (recurring / reconcile) on narrow screens */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll .mini-table { min-width: 520px; }
@@ -312,6 +312,12 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .vt-row { content-visibility: auto; contain-intrinsic-size: auto 38px; border-bottom: 1px solid var(--grid); cursor: pointer; }
 .vt-row:hover { background: var(--page); }
 .vt-cell { min-width: 0; }
+/* per-row include/exclude checkbox */
+.vt-cell.chk-cell { display: flex; align-items: center; justify-content: center; cursor: default; }
+.vt-cell.chk-cell input { width: 15px; height: 15px; accent-color: var(--g-required); cursor: pointer; margin: 0; }
+.vt-row.excluded .vt-cell:not(.chk-cell) { opacity: 0.4; text-decoration: line-through; }
+.txn-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.txn-controls .btn-ghost { padding: 4px 10px; font-size: 12px; }
 .vt-cell.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vt-cell.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vt-detail { background: var(--page); padding: 8px 12px; border-bottom: 1px solid var(--grid); content-visibility: auto; contain-intrinsic-size: auto 64px; }
