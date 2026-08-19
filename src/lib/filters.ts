@@ -52,6 +52,7 @@ export function boundsOf(txns: Txn[]): DataBounds {
 // top-ups, own-account moves) are excluded by default: they dwarf real spending
 // and aren't "spending". The "Internal" chip reveals them.
 export const DEFAULT_DIRECTIONS: Direction[] = ["in", "out"];
+export const ALL_DIRECTIONS: Direction[] = ["in", "out", "internal"];
 
 export function defaultFilters(bounds: DataBounds): Filters {
   return {

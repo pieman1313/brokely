@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Group, GroupDef, GroupKind, ParseResult, Txn } from "./types";
 import { parseStatement } from "./lib/parse";
-import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, type Filters, type GroupDim } from "./lib/filters";
+import { boundsOf, defaultFilters, applyFilters, isFiltered, groupKeyOf, ALL_DIRECTIONS, type Filters, type GroupDim } from "./lib/filters";
 import { buildSankey } from "./lib/sankey-model";
 import { computeStats, monthlySeries, topCategories, topMerchants, recurring } from "./lib/analytics";
 import { applyOverrides, loadOverrides, saveOverrides, distinctMerchants, categoriesWithGroup, type Overrides } from "./lib/overrides";
@@ -120,7 +120,18 @@ export default function App() {
   const rowKeys = useMemo(() => keyRows(tagged), [tagged]);
   const keyOf = (t: Txn) => rowKeys.get(t.id) ?? t.id;
 
-  const filtered = useMemo(() => (filters ? applyFilters(txns, filters) : txns), [txns, filters]);
+  // Filter once against ALL directions, then narrow by the chosen ones. Direction is the
+  // only per-row test that differs, so this is identical to filtering twice — but it
+  // builds the search haystack once instead of on every keystroke.
+  const withInternal = useMemo(
+    () => (filters ? applyFilters(txns, { ...filters, directions: ALL_DIRECTIONS }) : txns),
+    [txns, filters]
+  );
+  const filtered = useMemo(() => {
+    if (!filters) return txns;
+    const dirs = new Set(filters.directions);
+    return withInternal.filter((t) => dirs.has(t.direction));
+  }, [withInternal, filters, txns]);
   // rows the user unticked individually — out of every chart, tile, total and export
   const kept = useMemo(
     () => (excludedRows.size ? filtered.filter((t) => !excludedRows.has(keyOf(t))) : filtered),
@@ -136,6 +147,16 @@ export default function App() {
     [tagged, excludedRows, rowKeys]
   );
   const excludedInDataset = excludedHere.length;
+
+  // Own-account / savings-vault moves are hidden unless "Internal" is on, which silently
+  // swallows rows the user goes looking for. This is exactly what enabling it would add to
+  // the table — the same group-exclusion filter `rowsInView` uses, and individually
+  // unticked rows still LISTED (struck through), so the count matches what appears.
+  const hiddenInternalRows = useMemo(() => {
+    if (!filters || filters.directions.includes("internal")) return [];
+    const internal = withInternal.filter((t) => t.direction === "internal");
+    return excluded.size ? internal.filter((t) => !excluded.has(groupKeyOf(t, groupBy))) : internal;
+  }, [withInternal, filters, excluded, groupBy]);
 
   const model = useMemo(() => buildSankey(active, minFlowPct, groups), [active, minFlowPct, groups]);
   const stats = useMemo(() => computeStats(active), [active]);
@@ -342,6 +363,9 @@ export default function App() {
               onSetManyRows={setManyRows}
               totalExcluded={excludedInDataset}
               onRestoreAll={restoreAllRows}
+              hiddenInternal={hiddenInternalRows}
+              // add "internal" only — never resurrect an In/Out chip the user turned off
+              onShowInternal={() => patch({ directions: [...new Set([...filters.directions, "internal" as const])] })}
             />
           </Card>
         );
@@ -425,7 +449,13 @@ export default function App() {
         </>
       ) : (
         <>
-          <Card id="filters" title="Filters" subtitle={`${active.length.toLocaleString("en-US")} of ${txns.length.toLocaleString("en-US")} transactions in view`}>
+          <Card
+            id="filters"
+            title="Filters"
+            subtitle={`${active.length.toLocaleString("en-US")} of ${txns.length.toLocaleString("en-US")} transactions in view${
+              hiddenInternalRows.length ? ` · ${hiddenInternalRows.length.toLocaleString("en-US")} own-account transfer${hiddenInternalRows.length === 1 ? "" : "s"} hidden by “Internal”` : ""
+            }`}
+          >
             <SavedViews
               views={views}
               activeId={activeViewId}

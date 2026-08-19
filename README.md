@@ -75,7 +75,11 @@ npm run preview  # serve the production build
   per browser (they're a lasting correction, so they aren't part of a saved view).
 - **Supporting views** — stat tiles, monthly in/out/net trend, top categories,
   top merchants, a recurring-commitments (subscriptions & bills) panel, and a
-  sortable, expandable transaction table.
+  sortable, expandable transaction table with its own search (merchant, category,
+  tag, bank type *and* the statement's raw detail lines, so a reference number or
+  IBAN finds its row; diacritics and double spaces are folded, so "Timisoara"
+  matches "Timișoara"). If a search would also have matched an own-account
+  transfer that "Internal" is hiding, the table says so and offers to reveal it.
 - **Light / dark** theme toggle.
 
 ### A note on "internal" transfers

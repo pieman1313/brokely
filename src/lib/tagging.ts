@@ -257,7 +257,12 @@ export function categorizeRevolut(type: string, description: string, credit: num
   const merchant = cleanRevolutMerchant(desc);
   const up = merchant.toUpperCase();
 
-  if (/interest/.test(T)) return { group: "income", category: "Savings interest", who: "Revolut", direction: "in", rule: "revolut:interest" };
+  if (/interest/.test(T)) {
+    // 'Net interest paid to "TAXE Cherry Pie" for Aug 1, 2026' — attribute it to the
+    // vault that earned it, so savings activity reads as one account, not "Revolut".
+    const vault = desc.match(/"([^"]+)"/)?.[1]?.trim();
+    return { group: "income", category: "Savings interest", who: vault || "Revolut", direction: "in", rule: "revolut:interest" };
+  }
   if (/charge|fee/.test(T)) return { group: "optional", category: "Fees & charges", who: "Revolut", direction: "out", rule: "revolut:charge" };
   if (/exchange/.test(T)) return { group: "savings", category: "Currency exchange", who: merchant || "Revolut", direction: "internal", rule: "revolut:exchange" };
 

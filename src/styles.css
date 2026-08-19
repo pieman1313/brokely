@@ -318,6 +318,7 @@ input:focus, .search:focus, button:focus-visible { outline: 2px solid var(--g-re
 .vt-row.excluded .vt-cell:not(.chk-cell) { opacity: 0.4; text-decoration: line-through; }
 .txn-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .txn-controls .btn-ghost { padding: 4px 10px; font-size: 12px; }
+.txn-controls .search { width: auto; flex: 1 1 200px; max-width: 420px; }
 .vt-cell.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vt-cell.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vt-detail { background: var(--page); padding: 8px 12px; border-bottom: 1px solid var(--grid); content-visibility: auto; contain-intrinsic-size: auto 64px; }
